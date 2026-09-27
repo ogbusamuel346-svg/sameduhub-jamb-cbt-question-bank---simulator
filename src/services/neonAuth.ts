@@ -6,9 +6,29 @@ import { BetterAuthReactAdapter } from '@neondatabase/auth/react/adapters';
 // override this fallback during a Vercel build.
 const DEFAULT_NEON_AUTH_URL =
   'https://ep-royal-meadow-b45i9pwc.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth';
-const neonAuthUrl =
-  (import.meta.env.VITE_NEON_AUTH_URL as string | undefined)?.trim() ||
-  DEFAULT_NEON_AUTH_URL;
+const configuredNeonAuthUrl = (import.meta.env.VITE_NEON_AUTH_URL as string | undefined)?.trim();
+
+const isManagedNeonAuthUrl = (value: string | undefined): value is string => {
+  if (!value) return false;
+
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname.includes('.neonauth.') &&
+      parsed.pathname.replace(/\/$/, '').endsWith('/auth')
+    );
+  } catch {
+    return false;
+  }
+};
+
+// Do not let an app-relative value such as `/api/auth` turn into the Auth
+// service base URL. That makes Better Auth call the Vercel app and produces
+// 404s for routes that only exist on the Neon Auth service.
+const neonAuthUrl = isManagedNeonAuthUrl(configuredNeonAuthUrl)
+  ? configuredNeonAuthUrl
+  : DEFAULT_NEON_AUTH_URL;
 
 /**
  * Managed Neon Auth client. The URL is intentionally public: it identifies the
