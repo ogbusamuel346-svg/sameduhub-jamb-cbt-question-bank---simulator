@@ -1,0 +1,6 @@
+{
+  "name": "SamEduHub JAMB CBT Question Bank & Simulator",
+  "description": "Comprehensive JAMB UTME CBT question bank system with admin management, subject/topic organization, and real-time exam practice tests.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
