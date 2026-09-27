@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS questions (
     created_by VARCHAR(255) NOT NULL,
     reviewed_by VARCHAR(255),
     review_notes TEXT,
+    source VARCHAR(32) NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai_generated')),
+    syllabus_reference TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

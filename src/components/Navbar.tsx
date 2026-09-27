@@ -82,18 +82,20 @@ export const Navbar: React.FC = () => {
               <span>Practice Tests</span>
             </button>
 
-            {/* 2. Question Bank */}
-            <button
-              onClick={() => handleNavClick('admin_questions')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                activeView === 'admin_questions'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <BookOpen className="w-4 h-4 text-blue-400" />
-              <span>Question Bank</span>
-            </button>
+            {/* 2. Admin Question Bank */}
+            {isAuthenticated && user.role === 'admin' && (
+              <button
+                onClick={() => handleNavClick('admin_questions')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                  activeView === 'admin_questions'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 text-blue-400" />
+                <span>Question Bank</span>
+              </button>
+            )}
 
             {/* 3. My Results & History */}
             <button
@@ -255,18 +257,20 @@ export const Navbar: React.FC = () => {
             <span>Practice Tests</span>
           </button>
 
-          {/* 2. Question Bank */}
-          <button
-            onClick={() => handleNavClick('admin_questions')}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-              activeView === 'admin_questions'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-200 hover:bg-slate-800'
-            }`}
-          >
-            <BookOpen className="w-5 h-5 text-blue-400" />
-            <span>Question Bank</span>
-          </button>
+          {/* 2. Admin Question Bank */}
+          {isAuthenticated && user.role === 'admin' && (
+            <button
+              onClick={() => handleNavClick('admin_questions')}
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                activeView === 'admin_questions'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <BookOpen className="w-5 h-5 text-blue-400" />
+              <span>Question Bank</span>
+            </button>
+          )}
 
           {/* 3. My Results */}
           <button

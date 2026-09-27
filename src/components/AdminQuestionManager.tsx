@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext.tsx';
 import { JAMB_SUBJECTS, SUBJECT_TOPICS } from '../data/subjects.ts';
 import { Difficulty, Question, QuestionStatus } from '../types/index.ts';
 import { QuestionEditorModal } from './QuestionEditorModal.tsx';
+import { AdminQuestionGenerator } from './AdminQuestionGenerator.tsx';
 import {
   Plus,
   Search,
@@ -46,6 +47,7 @@ export const AdminQuestionManager: React.FC = () => {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [importJsonText, setImportJsonText] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
 
   // Available topics for the selected subject
   const availableTopics = useMemo(() => {
@@ -126,6 +128,14 @@ export const AdminQuestionManager: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setIsGeneratorOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>AI Generator</span>
+          </button>
+
           <button
             onClick={() => {
               setEditingQuestion(null);
@@ -377,6 +387,11 @@ export const AdminQuestionManager: React.FC = () => {
                         }`}>
                           {q.status}
                         </span>
+                        {q.source === 'ai_generated' && (
+                          <span className="px-2 py-0.5 rounded font-bold uppercase text-[10px] bg-indigo-100 text-indigo-800">
+                            AI draft · not official JAMB
+                          </span>
+                        )}
                       </div>
 
                       {/* Stem */}
@@ -445,6 +460,11 @@ export const AdminQuestionManager: React.FC = () => {
           setEditingQuestion(null);
         }}
         questionToEdit={editingQuestion}
+      />
+
+      <AdminQuestionGenerator
+        isOpen={isGeneratorOpen}
+        onClose={() => setIsGeneratorOpen(false)}
       />
 
       {/* JSON Import Modal */}

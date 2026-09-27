@@ -61,6 +61,12 @@ interface AppContextType {
   bulkDeleteQuestions: (ids: string[]) => void;
   resetQuestions: () => void;
   importQuestionsJson: (jsonString: string) => boolean;
+  generateQuestionDrafts: (input: {
+    subjectId: string;
+    topic: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    count: number;
+  }) => Promise<Question[]>;
 
   // CBT Exam actions
   startCbtTest: (config: CbtExamConfig) => void;
@@ -116,6 +122,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setToastMessage(null);
     }, 4000);
   };
+
+  const hydrateQuestions = async (includeAll = false) => {
+    const result = await NeonApiService.getQuestions(includeAll);
+    if (!result.success || result.questions.length === 0) return;
+
+    setQuestions(previous => {
+      const remoteIds = new Set(result.questions.map(question => question.id));
+      // Keep unsaved AI drafts and local seed questions, while Neon remains the
+      // source of truth for any question that already exists remotely.
+      const localOnly = previous.filter(question => !remoteIds.has(question.id));
+      const merged = [...result.questions, ...localOnly];
+      StorageService.saveQuestions(merged);
+      return merged;
+    });
+  };
+
+  useEffect(() => {
+    void hydrateQuestions(false);
+  }, []);
 
   type NeonSessionUser = {
     id: string;
@@ -180,6 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!cancelled) {
           setUserState(restoredUser);
           setIsAuthenticated(true);
+          void hydrateQuestions(restoredUser.role === 'admin');
         }
       } catch (error) {
         if (!cancelled) {
@@ -441,9 +467,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return health.isConnected;
   };
 
+  const isAdminSession = isAuthenticated && user.role === 'admin';
+  const isUnsavedDraft = (id: string) => id.startsWith('ai-draft-');
+
+  const reportQuestionSyncError = (error: string | undefined, fallback: string) => {
+    if (error) showToast(error, 'error');
+    else showToast(fallback, 'error');
+  };
+
   const createQuestion = (data: Omit<Question, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newQ: Question = {
       ...data,
+      source: data.source || 'manual',
       id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -452,13 +487,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast('Question created successfully!', 'success');
+
+    if (isAdminSession) {
+      void NeonApiService.createQuestion(newQ).then(result => {
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was created locally but could not be saved to Neon.');
+      });
+    }
   };
 
   const updateQuestion = (updatedQuestion: Question) => {
-    const updated = questions.map(q => q.id === updatedQuestion.id ? { ...updatedQuestion, updatedAt: new Date().toISOString() } : q);
+    const questionToSave = { ...updatedQuestion, updatedAt: new Date().toISOString() };
+    const updated = questions.map(q => q.id === updatedQuestion.id ? questionToSave : q);
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast('Question updated successfully!', 'success');
+
+    if (isAdminSession && !isUnsavedDraft(questionToSave.id)) {
+      void NeonApiService.updateQuestion(questionToSave).then(result => {
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was updated locally but could not be saved to Neon.');
+      });
+    }
   };
 
   const deleteQuestion = (id: string) => {
@@ -466,43 +514,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast('Question removed from question bank.', 'info');
+
+    if (isAdminSession && !isUnsavedDraft(id)) {
+      void NeonApiService.deleteQuestion(id).then(result => {
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was removed locally but could not be deleted from Neon.');
+      });
+    }
   };
 
   const approveQuestion = (id: string) => {
-    const updated = questions.map(q => q.id === id ? {
-      ...q,
+    const question = questions.find(q => q.id === id);
+    if (!question) return;
+
+    const approvedQuestion = {
+      ...question,
       status: 'approved' as const,
       reviewedBy: user.name,
       updatedAt: new Date().toISOString()
-    } : q);
+    };
+    const updated = questions.map(q => q.id === id ? approvedQuestion : q);
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast('Question approved for CBT practice tests!', 'success');
+
+    if (isAdminSession) {
+      // Upsert makes approval work for both unsaved AI drafts and local seed items.
+      void NeonApiService.createQuestion(approvedQuestion).then(result => {
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was approved locally but could not be saved to Neon.');
+      });
+    }
   };
 
   const rejectQuestion = (id: string, notes: string) => {
-    const updated = questions.map(q => q.id === id ? {
-      ...q,
+    const rejectedQuestion = questions.find(q => q.id === id);
+    if (!rejectedQuestion) return;
+
+    const updatedQuestion = {
+      ...rejectedQuestion,
       status: 'rejected' as const,
       reviewedBy: user.name,
       reviewNotes: notes,
       updatedAt: new Date().toISOString()
-    } : q);
+    };
+    const updated = questions.map(q => q.id === id ? updatedQuestion : q);
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast('Question marked as rejected with revision notes.', 'info');
+
+    if (isAdminSession && !isUnsavedDraft(id)) {
+      void NeonApiService.updateQuestionStatus(id, 'rejected', notes).then(result => {
+        if (!result.success && !result.error?.includes('not found')) {
+          reportQuestionSyncError(result.error, 'Question was rejected locally but could not be updated in Neon.');
+        }
+      });
+    }
   };
 
   const bulkApproveQuestions = (ids: string[]) => {
-    const updated = questions.map(q => ids.includes(q.id) ? {
+    const approvedQuestions = questions.filter(q => ids.includes(q.id)).map(q => ({
       ...q,
       status: 'approved' as const,
       reviewedBy: user.name,
       updatedAt: new Date().toISOString()
-    } : q);
+    }));
+    const approvedById = new Map(approvedQuestions.map(question => [question.id, question]));
+    const updated = questions.map(q => approvedById.get(q.id) || q);
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast(`Approved ${ids.length} questions in bulk!`, 'success');
+
+    if (isAdminSession && approvedQuestions.length > 0) {
+      void Promise.all(approvedQuestions.map(question => NeonApiService.createQuestion(question))).then(results => {
+        const failed = results.find(result => !result.success);
+        if (failed) reportQuestionSyncError(failed.error, 'Some approved questions could not be saved to Neon.');
+      });
+    }
   };
 
   const bulkDeleteQuestions = (ids: string[]) => {
@@ -510,6 +596,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQuestions(updated);
     StorageService.saveQuestions(updated);
     showToast(`Deleted ${ids.length} questions.`, 'info');
+
+    if (isAdminSession) {
+      void Promise.all(ids.filter(id => !isUnsavedDraft(id)).map(id => NeonApiService.deleteQuestion(id))).then(results => {
+        const failed = results.find(result => !result.success);
+        if (failed) reportQuestionSyncError(failed.error, 'Some questions could not be deleted from Neon.');
+      });
+    }
   };
 
   const resetQuestions = () => {
@@ -529,6 +622,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...item,
         id: item.id || `imp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         status: item.status || 'approved',
+        source: item.source || 'manual',
         createdAt: item.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: item.createdBy || user.name
@@ -538,12 +632,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setQuestions(merged);
       StorageService.saveQuestions(merged);
       showToast(`Successfully imported ${newItems.length} questions into question bank!`, 'success');
+
+      if (isAdminSession) {
+        void Promise.all(newItems.map(question => NeonApiService.createQuestion(question))).then(results => {
+          const failed = results.find(result => !result.success);
+          if (failed) reportQuestionSyncError(failed.error, 'Some imported questions could not be saved to Neon.');
+        });
+      }
       return true;
     } catch (e) {
       console.error('Import failed', e);
       showToast('Failed to parse question JSON file.', 'error');
       return false;
     }
+  };
+
+  const generateQuestionDrafts = async (input: {
+    subjectId: string;
+    topic: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    count: number;
+  }): Promise<Question[]> => {
+    if (!isAdminSession) {
+      showToast('Only authenticated admins can generate question drafts.', 'error');
+      return [];
+    }
+
+    const result = await NeonApiService.generateQuestionDrafts(input);
+    if (!result.success) {
+      showToast(result.error || 'Unable to generate question drafts.', 'error');
+      return [];
+    }
+
+    const merged = [...result.questions, ...questions];
+    setQuestions(merged);
+    StorageService.saveQuestions(merged);
+    showToast(`${result.questions.length} AI question drafts are ready for review.`, 'success');
+    return result.questions;
   };
 
   // CBT Exam Logic
@@ -678,6 +803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bulkDeleteQuestions,
         resetQuestions,
         importQuestionsJson,
+        generateQuestionDrafts,
         startCbtTest,
         submitCbtTest,
         exitCbtTest,

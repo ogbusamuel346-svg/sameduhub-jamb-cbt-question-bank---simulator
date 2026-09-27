@@ -1,4 +1,4 @@
-import { User, TestSession } from '../types/index.ts';
+import { Difficulty, Question, QuestionStatus, User, TestSession } from '../types/index.ts';
 import { getNeonAuthToken } from './neonAuth.ts';
 
 export interface NeonHealthResponse {
@@ -26,6 +26,25 @@ export interface ProfilePayload {
   jambRegNumber?: string;
   targetScore?: number;
   selectedSubjects?: string[];
+}
+
+export interface QuestionsApiResponse {
+  success: boolean;
+  questions: Question[];
+  error?: string;
+}
+
+export interface QuestionApiResponse {
+  success: boolean;
+  question?: Question;
+  error?: string;
+}
+
+export interface QuestionGenerationRequest {
+  subjectId: string;
+  topic: string;
+  difficulty: Difficulty;
+  count: number;
 }
 
 async function authenticatedHeaders(): Promise<HeadersInit> {
@@ -93,6 +112,94 @@ export const NeonApiService = {
         success: false,
         error: err.message || 'Unable to save your Neon profile.',
       };
+    }
+  },
+
+  async getQuestions(includeAll = false): Promise<QuestionsApiResponse> {
+    try {
+      const query = includeAll ? '?status=all' : '?status=approved';
+      const res = await fetch(`/api/questions${query}`, {
+        headers: includeAll ? await authenticatedHeaders() : { Accept: 'application/json' },
+      });
+      return await readResponse<QuestionsApiResponse>(res);
+    } catch (err: any) {
+      return {
+        success: false,
+        questions: [],
+        error: err.message || 'Unable to load questions from Neon.',
+      };
+    }
+  },
+
+  async generateQuestionDrafts(input: QuestionGenerationRequest): Promise<QuestionsApiResponse> {
+    try {
+      const res = await fetch('/api/questions/generate', {
+        method: 'POST',
+        headers: await authenticatedHeaders(),
+        body: JSON.stringify(input),
+      });
+      return await readResponse<QuestionsApiResponse>(res);
+    } catch (err: any) {
+      return {
+        success: false,
+        questions: [],
+        error: err.message || 'Unable to generate question drafts.',
+      };
+    }
+  },
+
+  async createQuestion(question: Question): Promise<QuestionApiResponse> {
+    try {
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: await authenticatedHeaders(),
+        body: JSON.stringify(question),
+      });
+      return await readResponse<QuestionApiResponse>(res);
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Unable to save question to Neon.' };
+    }
+  },
+
+  async updateQuestion(question: Question): Promise<QuestionApiResponse> {
+    try {
+      const res = await fetch(`/api/questions/${encodeURIComponent(question.id)}`, {
+        method: 'PUT',
+        headers: await authenticatedHeaders(),
+        body: JSON.stringify(question),
+      });
+      return await readResponse<QuestionApiResponse>(res);
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Unable to update question in Neon.' };
+    }
+  },
+
+  async updateQuestionStatus(
+    id: string,
+    status: QuestionStatus,
+    reviewNotes?: string,
+  ): Promise<QuestionApiResponse> {
+    try {
+      const res = await fetch(`/api/questions/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: await authenticatedHeaders(),
+        body: JSON.stringify({ status, reviewNotes }),
+      });
+      return await readResponse<QuestionApiResponse>(res);
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Unable to update question status in Neon.' };
+    }
+  },
+
+  async deleteQuestion(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetch(`/api/questions/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: await authenticatedHeaders(),
+      });
+      return await readResponse<{ success: boolean; error?: string }>(res);
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Unable to delete question from Neon.' };
     }
   },
 

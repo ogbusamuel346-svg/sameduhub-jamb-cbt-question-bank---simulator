@@ -35,3 +35,20 @@ the Neon Auth user id.
 4. Keep `DATABASE_URL`, `NEON_AUTH_BASE_URL`, and `NEON_AUTH_JWKS_URL` server-side.
 
 Do not put a database password in browser code or commit it to `.env.example`.
+
+## Admin Question Generator
+
+Admins can open **Question Bank → AI Generator** to choose a JAMB subject,
+syllabus topic, difficulty, and 1–50 questions. Generation uses the
+server-side `GEMINI_API_KEY` and the JAMB IBASS syllabus reference at
+https://ibass.jamb.gov.ng/.
+
+Generated items are clearly labeled as AI practice drafts, are not official
+JAMB questions, and remain out of Neon until an authenticated admin reviews,
+edits, and approves them. Approved questions are stored in the Neon `questions`
+table and organized by subject, topic, and difficulty.
+
+For Vercel, configure `DATABASE_URL`, `NEON_AUTH_BASE_URL`,
+`NEON_AUTH_JWKS_URL`, `VITE_NEON_AUTH_URL`, and `GEMINI_API_KEY` in the
+project environment settings. The repository includes a catch-all API
+function under `api/[...path].ts` for the protected Neon routes.

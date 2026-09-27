@@ -163,5 +163,37 @@ export const SUBJECT_TOPICS: Record<string, string[]> = {
     'Constitutional Development (1922-1999)',
     'Nigerian Federalism and Local Government',
     'Foreign Policy and ECOWAS/UN'
+  ],
+  literature: [
+    'Literary Genres and Forms',
+    'Plot, Setting and Characterization',
+    'Themes, Style and Structure',
+    'Poetry: Figures of Speech and Appreciation',
+    'Drama: Elements and Dramatic Techniques',
+    'Prose: Narrative Techniques and Appreciation',
+    'African and Non-African Literature',
+    'Literary Terms and Devices'
+  ],
+  commerce: [
+    'Introduction to Commerce',
+    'Trade and Aids to Trade',
+    'Business Ownership and Organisation',
+    'Banking, Money and Financial Institutions',
+    'Insurance and Risk Management',
+    'Transportation, Communication and Warehousing',
+    'Marketing, Advertising and Consumer Protection',
+    'Business Management and Office Practice'
+  ],
+  crs: [
+    'Creation, Covenant and the Patriarchs',
+    'Leadership, Prophecy and Social Justice',
+    'The Life and Teachings of Jesus',
+    'Miracles, Parables, Death and Resurrection',
+    'The Early Christian Church',
+    'Pauline Epistles and Christian Conduct',
+    'Faith, Love, Service and Christian Ethics',
+    'Christianity in Nigerian Society'
   ]
 };
+
+export const JAMB_SYLLABUS_SOURCE_URL = 'https://ibass.jamb.gov.ng/';

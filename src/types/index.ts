@@ -1,5 +1,6 @@
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type QuestionStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+export type QuestionSource = 'manual' | 'ai_generated';
 export type UserRole = 'admin' | 'reviewer' | 'student';
 export type OptionKey = 'A' | 'B' | 'C' | 'D';
 
@@ -37,6 +38,8 @@ export interface Question {
   correctAnswer: OptionKey;
   explanation: string;
   status: QuestionStatus;
+  source?: QuestionSource;
+  syllabusReference?: string;
   reviewedBy?: string;
   reviewNotes?: string;
   createdAt: string;

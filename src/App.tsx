@@ -13,7 +13,9 @@ import { NeonAuthModal } from './components/NeonAuthModal.tsx';
 import { GraduationCap, ShieldCheck, Heart, AlertCircle, CheckCircle, Info } from 'lucide-react';
 
 const MainContent: React.FC = () => {
-  const { activeView, toastMessage } = useApp();
+  const { activeView, toastMessage, user, isAuthenticated, openAuthModal, setActiveView } = useApp();
+  const isAdminView = activeView === 'admin_questions' || activeView === 'admin_review' || activeView === 'neon_settings';
+  const hasAdminAccess = isAuthenticated && user.role === 'admin';
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
@@ -53,10 +55,25 @@ const MainContent: React.FC = () => {
         {activeView === 'simulator_setup' && <CbtSimulatorSetup />}
         {activeView === 'exam_room' && <CbtExamRoom />}
         {activeView === 'results' && <CbtResultsModal />}
-        {activeView === 'admin_questions' && <AdminQuestionManager />}
-        {activeView === 'admin_review' && <AdminReviewQueue />}
+        {isAdminView && !hasAdminAccess && (
+          <div className="max-w-xl mx-auto px-4 py-20 text-center">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-4">
+              <ShieldCheck className="w-12 h-12 mx-auto text-orange-500" />
+              <h1 className="text-2xl font-extrabold text-slate-900">Admin access required</h1>
+              <p className="text-sm text-slate-500">Sign in with an approved SamEduHub admin account to manage and generate questions.</p>
+              <div className="flex justify-center gap-2">
+                {!isAuthenticated && (
+                  <button onClick={() => openAuthModal('login')} className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold">Log in</button>
+                )}
+                <button onClick={() => setActiveView('dashboard')} className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Back to dashboard</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {activeView === 'admin_questions' && hasAdminAccess && <AdminQuestionManager />}
+        {activeView === 'admin_review' && hasAdminAccess && <AdminReviewQueue />}
         {activeView === 'history' && <CandidateHistoryView />}
-        {activeView === 'neon_settings' && <NeonSyncModal />}
+        {activeView === 'neon_settings' && hasAdminAccess && <NeonSyncModal />}
       </main>
 
       {/* Footer (hidden during exam mode) */}

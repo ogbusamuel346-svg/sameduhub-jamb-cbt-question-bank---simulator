@@ -59,6 +59,9 @@ export const AdminReviewQueue: React.FC = () => {
           <p className="text-xs sm:text-sm text-slate-300">
             Vet questions for syllabus alignment, correctness of key, and explanation rigor before publishing to candidates.
           </p>
+          <p className="text-[11px] text-amber-300 mt-2 font-semibold">
+            AI-generated drafts are practice material only and are not official JAMB questions.
+          </p>
         </div>
 
         {pendingQuestions.length > 0 && (
@@ -116,6 +119,11 @@ export const AdminReviewQueue: React.FC = () => {
                     }`}>
                       {q.difficulty}
                     </span>
+                    {q.source === 'ai_generated' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                        AI draft · human review required
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-xs text-slate-400 flex items-center gap-1">
