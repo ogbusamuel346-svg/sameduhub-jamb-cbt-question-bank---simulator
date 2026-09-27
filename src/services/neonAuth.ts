@@ -1,7 +1,14 @@
 import { createAuthClient } from '@neondatabase/auth';
 import { BetterAuthReactAdapter } from '@neondatabase/auth/react/adapters';
 
-const neonAuthUrl = import.meta.env.VITE_NEON_AUTH_URL as string | undefined;
+// Neon Auth URLs identify a branch and are safe to expose in a browser bundle.
+// Keep the environment variable as the first choice so a future branch can
+// override this fallback during a Vercel build.
+const DEFAULT_NEON_AUTH_URL =
+  'https://ep-royal-meadow-b45i9pwc.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth';
+const neonAuthUrl =
+  (import.meta.env.VITE_NEON_AUTH_URL as string | undefined)?.trim() ||
+  DEFAULT_NEON_AUTH_URL;
 
 /**
  * Managed Neon Auth client. The URL is intentionally public: it identifies the
