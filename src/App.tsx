@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext.tsx';
 import { Navbar } from './components/Navbar.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
@@ -15,6 +15,18 @@ const MainContent: React.FC = () => {
   const { activeView, toastMessage, user, isAuthenticated, openAuthModal, setActiveView } = useApp();
   const isAdminView = activeView === 'admin_questions' || activeView === 'admin_review';
   const hasAdminAccess = isAuthenticated && user.role === 'admin';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const isAdminRoute = activeView === 'admin_questions' || activeView === 'admin_review';
+    const currentPath = window.location.pathname.replace(/\/+$/, '').toLowerCase() || '/';
+    const desiredPath = isAdminRoute ? '/admin' : '/';
+
+    if (currentPath !== desiredPath) {
+      window.history.replaceState({}, document.title, desiredPath);
+    }
+  }, [activeView]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">

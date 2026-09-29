@@ -340,15 +340,19 @@ async function ensureSupabaseProfile(authUser: {
 
   if (existing.rows[0]) {
     const row = existing.rows[0];
-    if (row.supabaseUserId !== authUser.id) {
+    const shouldBeAdmin = configuredAdminEmails.has(email);
+    if (row.supabaseUserId !== authUser.id || (shouldBeAdmin && row.role !== 'admin')) {
       await pool.query(
         `UPDATE users
-         SET supabase_user_id = $1, email = $2
+         SET supabase_user_id = $1,
+             email = $2,
+             role = CASE WHEN $4 THEN 'admin' ELSE role END
          WHERE id = $3`,
-        [authUser.id, email, row.id],
+        [authUser.id, email, row.id, shouldBeAdmin],
       );
       row.supabaseUserId = authUser.id;
       row.email = email;
+      if (shouldBeAdmin) row.role = 'admin';
     }
     return row;
   }
@@ -411,15 +415,19 @@ async function ensureSupabaseProfile(authUser: {
 
     if (retry.rows[0]) {
       const row = retry.rows[0];
-      if (row.supabaseUserId !== authUser.id) {
+      const shouldBeAdmin = configuredAdminEmails.has(email);
+      if (row.supabaseUserId !== authUser.id || (shouldBeAdmin && row.role !== 'admin')) {
         await pool.query(
           `UPDATE users
-           SET supabase_user_id = $1, email = $2
+           SET supabase_user_id = $1,
+               email = $2,
+               role = CASE WHEN $4 THEN 'admin' ELSE role END
            WHERE id = $3`,
-          [authUser.id, email, row.id],
+          [authUser.id, email, row.id, shouldBeAdmin],
         );
         row.supabaseUserId = authUser.id;
         row.email = email;
+        if (shouldBeAdmin) row.role = 'admin';
       }
       return row;
     }

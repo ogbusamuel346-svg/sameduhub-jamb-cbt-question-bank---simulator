@@ -28,6 +28,13 @@ export type AppView =
   | 'history'
   | 'neon_settings';
 
+function getInitialAppView(): AppView {
+  if (typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '').toLowerCase() === '/admin') {
+    return 'admin_questions';
+  }
+  return 'dashboard';
+}
+
 export interface CbtExamConfig {
   mode: 'full_jamb' | 'subject_practice' | 'topic_drill' | 'quick_mock';
   subjects: string[];
@@ -111,7 +118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [questions, setQuestions] = useState<Question[]>(() => StorageService.getQuestions());
   const [testSessions, setTestSessions] = useState<TestSession[]>(() => StorageService.getTestSessions());
   const [activeTestSession, setActiveTestSession] = useState<TestSession | null>(null);
-  const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [activeView, setActiveView] = useState<AppView>(getInitialAppView);
   const [selectedResultForReview, setSelectedResultForReview] = useState<TestSession | null>(null);
   const [neonConfig, setNeonConfig] = useState<NeonConfig>(() => StorageService.getNeonConfig());
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
