@@ -19,20 +19,24 @@ View your app in AI Studio: https://ai.studio/apps/5c3a7481-a91d-45df-bf0a-66959
 3. Run the app:
    `npm run dev`
 
-## Neon Authentication
+## Application Authentication
 
-Authentication is handled by Neon Managed Auth. The app uses Neon Auth for
-email/password sign-up, sign-in, session restoration, sign-out, and password
-reset; candidate details are stored in the Neon `users` profile table using
-the Neon Auth user id.
+The app owns authentication. Email/password accounts are stored in the Neon
+Postgres `users` table with Node `scrypt` password hashes. Successful sign-in
+creates a random opaque session token; only its SHA-256 hash is stored in
+`auth_sessions`, while the browser receives an `HttpOnly`, `SameSite=Lax`
+cookie. Neon Managed Auth is not enabled or used.
 
-1. Deploy the existing `auth: true` declaration in `neon.ts` with the Neon CLI.
-2. Pull the linked branch environment with `neon env pull`. The Vite config
-   automatically exposes `NEON_AUTH_BASE_URL` to the browser as
-   `VITE_NEON_AUTH_URL`; setting the Vite variable explicitly is also supported.
-3. Add the production origin to Neon Auth's trusted domains with
-   `neon neon-auth domain add https://your-domain.example`.
-4. Keep `DATABASE_URL`, `NEON_AUTH_BASE_URL`, and `NEON_AUTH_JWKS_URL` server-side.
+On startup, the server creates or migrates the `users` and `auth_sessions`
+tables. Existing Neon Auth users do not have transferable passwords or session
+cookies, so they must create a new application account after this cutover.
+Existing profile/question/test data is not deleted.
+
+Set `AUTH_ADMIN_EMAILS` to a comma-separated list of trusted email addresses
+before signup when those accounts should receive the admin role. Keep this
+variable server-side. Password-reset email delivery is intentionally disabled
+until an email provider is configured; the UI reports that state instead of
+pretending to send a reset link.
 
 Do not put a database password in browser code or commit it to `.env.example`.
 
@@ -48,7 +52,10 @@ JAMB questions, and remain out of Neon until an authenticated admin reviews,
 edits, and approves them. Approved questions are stored in the Neon `questions`
 table and organized by subject, topic, and difficulty.
 
-For Vercel, configure `DATABASE_URL`, `NEON_AUTH_BASE_URL`,
-`NEON_AUTH_JWKS_URL`, `VITE_NEON_AUTH_URL`, and `GEMINI_API_KEY` in the
-project environment settings. The repository includes a catch-all API
-function under `api/[...path].ts` for the protected Neon routes.
+For Vercel, configure `DATABASE_URL`, `AUTH_ADMIN_EMAILS`, and
+`GEMINI_API_KEY` in the project environment settings. The repository includes
+a catch-all API function under `api/[...path].ts` for the protected routes.
+
+Note: this repository is currently a Vite React SPA with an Express API. The
+authentication boundary is app-owned and framework-independent; converting the
+whole UI to Next.js would be a separate migration.

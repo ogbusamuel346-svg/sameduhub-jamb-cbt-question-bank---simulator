@@ -9,7 +9,7 @@ import { AdminQuestionManager } from './components/AdminQuestionManager.tsx';
 import { AdminReviewQueue } from './components/AdminReviewQueue.tsx';
 import { CandidateHistoryView } from './components/CandidateHistoryView.tsx';
 import { NeonSyncModal } from './components/NeonSyncModal.tsx';
-import { NeonAuthModal } from './components/NeonAuthModal.tsx';
+import { AuthModal } from './components/AuthModal.tsx';
 import { GraduationCap, ShieldCheck, Heart, AlertCircle, CheckCircle, Info } from 'lucide-react';
 
 const MainContent: React.FC = () => {
@@ -19,8 +19,8 @@ const MainContent: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
-      {/* Neon Authentication Modal (Sign In / Sign Up) */}
-      <NeonAuthModal />
+      {/* Application authentication modal (Sign In / Sign Up) */}
+      <AuthModal />
 
       {/* Toast Notification Alert */}
       {toastMessage && (
@@ -96,7 +96,9 @@ const MainContent: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-6 text-xs font-semibold">
-                <span>Database & Auth: <strong className="text-emerald-400 font-mono">Neon Serverless Postgres</strong></span>
+                <span>Database: <strong className="text-emerald-400 font-mono">Neon Serverless Postgres</strong></span>
+                <span>•</span>
+                <span>Auth: <strong className="text-blue-300">App-managed sessions</strong></span>
                 <span>•</span>
                 <span>Role-Based Access: <strong className="text-orange-400">Admin & Student</strong></span>
               </div>

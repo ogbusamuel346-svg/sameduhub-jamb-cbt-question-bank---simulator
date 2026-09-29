@@ -3,7 +3,13 @@ import { Pool } from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  scrypt as scryptCallback,
+  timingSafeEqual,
+} from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from './src/data/subjects.ts';
 
@@ -12,8 +18,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Neon injects DATABASE_URL after `neon link` / `neon deploy`. Never ship a
-// database credential or use a local auth fallback in application code.
+// Neon still provides Postgres, but authentication is owned by this app.
 const NEON_PG_URL = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 const neonDatabaseUrl = (() => {
   if (!NEON_PG_URL) return null;
@@ -25,22 +30,46 @@ const neonDatabaseUrl = (() => {
   }
 })();
 
-const neonAuthJwks = (() => {
-  if (!process.env.NEON_AUTH_JWKS_URL) return null;
-  try {
-    return createRemoteJWKSet(new URL(process.env.NEON_AUTH_JWKS_URL));
-  } catch (error) {
-    console.error('[Neon Auth] Invalid NEON_AUTH_JWKS_URL:', error);
-    return null;
-  }
-})();
-
 const pool = new Pool({
   connectionString: NEON_PG_URL,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 });
+
+const SESSION_COOKIE_NAME = 'sameduhub_session';
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const PASSWORD_HASH_KEY_LENGTH = 64;
+const PASSWORD_HASH_COST = 16384;
+const configuredAdminEmails = new Set(
+  (process.env.AUTH_ADMIN_EMAILS || '')
+    .split(',')
+    .map(email => email.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+type DatabaseExecutor = Pick<Pool, 'query'>;
+type SessionIdentity = {
+  sub: string;
+  email: string;
+  name: string;
+  role: string;
+  user: any;
+};
+
+const deriveScryptKey = (password: string, salt: Buffer, keyLength: number) =>
+  new Promise<Buffer>((resolve, reject) => {
+    scryptCallback(
+      password,
+      salt,
+      keyLength,
+      { N: PASSWORD_HASH_COST, r: 8, p: 1 },
+      (error, derivedKey) => {
+        if (error) reject(error);
+        else resolve(derivedKey as Buffer);
+      },
+    );
+  });
 
 class HttpError extends Error {
   statusCode: number;
@@ -59,13 +88,13 @@ const QUESTION_OPTION_KEYS = ['A', 'B', 'C', 'D'] as const;
 async function initNeonDatabase() {
   try {
     await pool.query(`
-      -- Neon Auth owns credentials and sessions in neon_auth. This table only
-      -- stores the application's candidate profile keyed by Neon Auth user id.
+      -- Application-owned identity. Passwords are stored as scrypt hashes only.
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(64) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         role VARCHAR(32) NOT NULL DEFAULT 'student',
+        password_hash TEXT,
         jamb_reg_number VARCHAR(64),
         target_score INT DEFAULT 300,
         avatar_url TEXT,
@@ -77,6 +106,16 @@ async function initNeonDatabase() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS target_score INT DEFAULT 300;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS jamb_reg_number VARCHAR(64);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        token_hash CHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
 
       CREATE TABLE IF NOT EXISTS questions (
         id VARCHAR(64) PRIMARY KEY,
@@ -136,28 +175,119 @@ async function initNeonDatabase() {
   }
 }
 
-async function authenticateRequest(req: Request): Promise<JWTPayload> {
-  const authorization = req.header('authorization');
-  const token = authorization?.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length).trim()
-    : '';
-
-  if (!token || !neonAuthJwks) {
-    throw new Error('Missing or unconfigured Neon Auth bearer token.');
-  }
-
-  const { payload } = await jwtVerify(token, neonAuthJwks, {
-    issuer: process.env.NEON_AUTH_BASE_URL || undefined,
-  });
-
-  if (!payload.sub) {
-    throw new Error('Neon Auth token does not contain a user id.');
-  }
-
-  return payload;
+function hashSessionToken(token: string) {
+  return createHash('sha256').update(token).digest('hex');
 }
 
-function sendUnauthorized(res: Response, error = 'Neon Auth session required.') {
+async function hashPassword(password: string) {
+  const salt = randomBytes(16);
+  const derivedKey = await deriveScryptKey(password, salt, PASSWORD_HASH_KEY_LENGTH);
+  return `scrypt$${salt.toString('hex')}$${derivedKey.toString('hex')}`;
+}
+
+async function verifyPassword(password: string, storedHash: string | null | undefined) {
+  if (!storedHash) return false;
+
+  const [algorithm, saltHex, hashHex] = storedHash.split('$');
+  if (algorithm !== 'scrypt' || !saltHex || !hashHex || !/^[a-f0-9]+$/i.test(saltHex) || !/^[a-f0-9]+$/i.test(hashHex)) {
+    return false;
+  }
+
+  const expected = Buffer.from(hashHex, 'hex');
+  const actual = await deriveScryptKey(password, Buffer.from(saltHex, 'hex'), expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function parseCookies(req: Request) {
+  const cookies: Record<string, string> = {};
+  for (const part of (req.header('cookie') || '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator === -1) continue;
+    const key = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+  }
+  return cookies;
+}
+
+function getSessionToken(req: Request) {
+  const cookieToken = parseCookies(req)[SESSION_COOKIE_NAME];
+  if (cookieToken) return cookieToken;
+
+  const authorization = req.header('authorization');
+  return authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length).trim()
+    : '';
+}
+
+function setSessionCookie(res: Response, token: string) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}; HttpOnly; SameSite=Lax${secure}`,
+  );
+}
+
+function clearSessionCookie(res: Response) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`,
+  );
+}
+
+async function createSession(userId: string, res: Response, executor: DatabaseExecutor = pool) {
+  const token = randomBytes(32).toString('base64url');
+  await executor.query(
+    `INSERT INTO auth_sessions (token_hash, user_id, expires_at)
+     VALUES ($1, $2, NOW() + INTERVAL '30 days')`,
+    [hashSessionToken(token), userId],
+  );
+  setSessionCookie(res, token);
+}
+
+async function authenticateRequest(req: Request): Promise<SessionIdentity> {
+  const token = getSessionToken(req);
+  if (!token) throw new HttpError(401, 'App session required.');
+
+  const result = await pool.query(
+    `SELECT
+       u.id,
+       u.name,
+       u.email,
+       u.role,
+       u.jamb_reg_number AS "jambRegNumber",
+       u.target_score AS "targetScore",
+       u.avatar_url AS "avatarUrl",
+       u.selected_subjects AS "selectedSubjects",
+       u.created_at AS "createdAt"
+     FROM auth_sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = $1 AND s.expires_at > NOW()
+     LIMIT 1`,
+    [hashSessionToken(token)],
+  );
+
+  if (result.rows.length === 0) throw new HttpError(401, 'Invalid or expired app session.');
+
+  const user = profileFromRow(result.rows[0]);
+  return {
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    user,
+  };
+}
+
+async function deleteSession(req: Request) {
+  const token = getSessionToken(req);
+  if (token) {
+    await pool.query('DELETE FROM auth_sessions WHERE token_hash = $1', [hashSessionToken(token)]);
+  }
+}
+
+function sendUnauthorized(res: Response, error = 'App session required.') {
   return res.status(401).json({ success: false, error });
 }
 
@@ -225,9 +355,6 @@ async function requireAdmin(req: Request) {
 function respondWithError(res: Response, error: any, fallback: string) {
   if (error instanceof HttpError) {
     return res.status(error.statusCode).json({ success: false, error: error.message });
-  }
-  if (error?.code === 'ERR_JWT_INVALID' || error?.message?.includes('bearer token')) {
-    return sendUnauthorized(res, 'Invalid Neon Auth session.');
   }
   console.error(`[Neon API Error] ${fallback}`, error?.message || error);
   return res.status(500).json({ success: false, error: fallback });
@@ -460,7 +587,164 @@ export async function createApiApp() {
   });
 
   // ----------------------------------------------------
-  // 2. Candidate profile linked to Neon Auth identity
+  // 2. Application-owned authentication
+  // ----------------------------------------------------
+  app.post('/api/auth/signup', async (req: Request, res: Response) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const jambRegNumber = typeof req.body?.jambRegNumber === 'string'
+      ? req.body.jambRegNumber.trim().toUpperCase()
+      : '';
+    const selectedSubjects = Array.isArray(req.body?.selectedSubjects)
+      ? req.body.selectedSubjects.filter((subject: unknown): subject is string => typeof subject === 'string').slice(0, 4)
+      : [];
+    const targetScore = Number(req.body?.targetScore);
+
+    if (name.length < 2 || name.length > 255) {
+      return res.status(400).json({ success: false, error: 'Enter a valid full name.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Enter a valid email address.' });
+    }
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ success: false, error: 'Password must be 8 to 128 characters.' });
+    }
+
+    const finalSubjects = selectedSubjects.length > 0
+      ? selectedSubjects
+      : ['english', 'mathematics', 'physics', 'chemistry'];
+    const finalScore = Number.isFinite(targetScore) && targetScore >= 200 && targetScore <= 400
+      ? Math.round(targetScore)
+      : 320;
+    const finalReg = jambRegNumber || `2026/UTME/${Math.floor(100000 + Math.random() * 900000)}`;
+    const userId = `usr-${randomUUID()}`;
+    const role = configuredAdminEmails.has(email) ? 'admin' : 'student';
+    const passwordHash = await hashPassword(password);
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `INSERT INTO users (
+          id, name, email, role, password_hash, jamb_reg_number, target_score, avatar_url, selected_subjects
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING
+          id,
+          name,
+          email,
+          role,
+          jamb_reg_number AS "jambRegNumber",
+          target_score AS "targetScore",
+          avatar_url AS "avatarUrl",
+          selected_subjects AS "selectedSubjects",
+          created_at AS "createdAt"`,
+        [
+          userId,
+          name,
+          email,
+          role,
+          passwordHash,
+          finalReg,
+          finalScore,
+          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+          finalSubjects,
+        ],
+      );
+      await client.query('COMMIT');
+
+      await createSession(userId, res);
+      return res.status(201).json({
+        success: true,
+        user: profileFromRow(result.rows[0]),
+        message: 'Account created successfully.',
+      });
+    } catch (error: any) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      if (error?.code === '23505') {
+        return res.status(409).json({ success: false, error: 'An account with that email already exists.' });
+      }
+      console.error('[App Auth Signup Error]', error?.message || error);
+      return res.status(500).json({ success: false, error: 'Unable to create your account.' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post(['/api/auth/signin', '/api/auth/login'], async (req: Request, res: Response) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email and password are required.' });
+    }
+
+    try {
+      const result = await pool.query(
+        `SELECT
+          id,
+          name,
+          email,
+          role,
+          password_hash,
+          jamb_reg_number AS "jambRegNumber",
+          target_score AS "targetScore",
+          avatar_url AS "avatarUrl",
+          selected_subjects AS "selectedSubjects",
+          created_at AS "createdAt"
+         FROM users
+         WHERE lower(email) = $1
+         LIMIT 1`,
+        [email],
+      );
+      const row = result.rows[0];
+      const passwordMatches = await verifyPassword(password, row?.password_hash);
+
+      if (!row || !passwordMatches) {
+        return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+      }
+
+      await pool.query('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
+      await createSession(row.id, res);
+      return res.json({ success: true, user: profileFromRow(row), message: 'Signed in successfully.' });
+    } catch (error: any) {
+      console.error('[App Auth Signin Error]', error?.message || error);
+      return res.status(500).json({ success: false, error: 'Unable to sign you in.' });
+    }
+  });
+
+  app.get('/api/auth/session', async (req: Request, res: Response) => {
+    try {
+      const authUser = await authenticateRequest(req);
+      return res.json({ success: true, user: authUser.user });
+    } catch (error: any) {
+      if (error instanceof HttpError) return sendUnauthorized(res, error.message);
+      console.error('[App Auth Session Error]', error?.message || error);
+      return res.status(500).json({ success: false, error: 'Unable to restore your session.' });
+    }
+  });
+
+  app.post('/api/auth/signout', async (req: Request, res: Response) => {
+    try {
+      await deleteSession(req);
+    } catch (error: any) {
+      console.error('[App Auth Signout Error]', error?.message || error);
+    }
+    clearSessionCookie(res);
+    return res.json({ success: true, message: 'Signed out successfully.' });
+  });
+
+  app.post('/api/auth/password-reset/request', async (_req: Request, res: Response) => {
+    // Password-reset email delivery is deliberately not faked. Add an email
+    // provider before exposing reset links to users in production.
+    return res.status(501).json({
+      success: false,
+      error: 'Password reset email delivery is not configured yet.',
+    });
+  });
+
+  // ----------------------------------------------------
+  // 3. Candidate profile linked to the application session
   // ----------------------------------------------------
   app.get('/api/auth/profile', async (req: Request, res: Response) => {
     try {
@@ -488,11 +772,11 @@ export async function createApiApp() {
 
       return res.json({ success: true, user: profileFromRow(result.rows[0]) });
     } catch (error: any) {
-      if (error.code === 'ERR_JWT_INVALID' || error.message?.includes('bearer token')) {
-        return sendUnauthorized(res, 'Invalid Neon Auth session.');
+      if (error instanceof HttpError) {
+        return sendUnauthorized(res, error.message);
       }
-      console.error('[Neon Profile Read Error]', error.message);
-      return res.status(500).json({ success: false, error: 'Unable to load Neon profile.' });
+      console.error('[App Profile Read Error]', error.message);
+      return res.status(500).json({ success: false, error: 'Unable to load your profile.' });
     }
   });
 
@@ -511,7 +795,7 @@ export async function createApiApp() {
       const normalizedEmail = email.trim().toLowerCase();
       const tokenEmail = typeof authUser.email === 'string' ? authUser.email.toLowerCase() : null;
       if (tokenEmail && tokenEmail !== normalizedEmail) {
-        return sendUnauthorized(res, 'Profile email must match the Neon Auth identity.');
+        return sendUnauthorized(res, 'Profile email must match the signed-in account.');
       }
 
       const finalReg = jambRegNumber && String(jambRegNumber).trim()
@@ -558,20 +842,20 @@ export async function createApiApp() {
       return res.status(201).json({
         success: true,
         user: profileFromRow(result.rows[0]),
-        message: 'Candidate profile saved in Neon PostgreSQL.',
+        message: 'Candidate profile saved.',
       });
     } catch (error: any) {
-      if (error.code === 'ERR_JWT_INVALID' || error.message?.includes('bearer token')) {
-        return sendUnauthorized(res, 'Invalid Neon Auth session.');
+      if (error instanceof HttpError) {
+        return sendUnauthorized(res, error.message);
       }
       if (error.code === '23505') {
         return res.status(409).json({
           success: false,
-          error: 'That email or JAMB registration number is already linked to another Neon profile.',
+          error: 'That email or JAMB registration number is already linked to another profile.',
         });
       }
-      console.error('[Neon Profile Write Error]', error.message);
-      return res.status(500).json({ success: false, error: 'Unable to save Neon profile.' });
+      console.error('[App Profile Write Error]', error.message);
+      return res.status(500).json({ success: false, error: 'Unable to save your profile.' });
     }
   });
 
@@ -795,10 +1079,10 @@ export async function createApiApp() {
       }
 
       if (session.userId !== authUser.sub) {
-        return sendUnauthorized(res, 'You can only save sessions for your Neon Auth user.');
+        return sendUnauthorized(res, 'You can only save sessions for your signed-in account.');
       }
 
-      // The bearer token and user_id check above protect this write from cross-user saves.
+      // The app session and user_id check above protect this write from cross-user saves.
       await pool.query(
         `INSERT INTO test_sessions (
           id, user_id, mode, title, subjects, question_ids, answers, marked_for_review,
@@ -832,8 +1116,8 @@ export async function createApiApp() {
 
       return res.json({ success: true, message: 'Session saved to Neon database.' });
     } catch (err: any) {
-      if (err.code === 'ERR_JWT_INVALID' || err.message?.includes('bearer token')) {
-        return sendUnauthorized(res, 'Invalid Neon Auth session.');
+      if (err instanceof HttpError) {
+        return sendUnauthorized(res, err.message);
       }
       console.error('[Neon Save Session Error]', err.message);
       return res.status(500).json({ success: false, error: err.message });

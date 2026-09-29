@@ -106,16 +106,24 @@ export const StorageService = {
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. Candidate profiles (authentication is managed by Neon Auth in neon_auth)
+-- 1. Candidate profiles and application-owned credentials
 CREATE TABLE IF NOT EXISTS users (
-    -- This id is the Neon Auth user id; passwords never live in this table.
     id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     role VARCHAR(32) NOT NULL DEFAULT 'student' CHECK (role IN ('admin', 'reviewer', 'student')),
+    password_hash TEXT,
     jamb_reg_number VARCHAR(64),
     target_score INT DEFAULT 300,
     avatar_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Session tokens are random opaque values; only their SHA-256 hashes are stored.
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash CHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

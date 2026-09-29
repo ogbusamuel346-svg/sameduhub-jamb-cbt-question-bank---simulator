@@ -14,11 +14,7 @@ import {
   GUEST_USER
 } from '../services/storage.ts';
 import { NeonApiService } from '../services/neonApi.ts';
-import {
-  getNeonAuthError,
-  neonAuthClient,
-  requireNeonAuthClient
-} from '../services/neonAuth.ts';
+import { AuthService } from '../services/auth.ts';
 
 export type AppView =
   | 'dashboard'
@@ -77,7 +73,7 @@ interface AppContextType {
   toastMessage: { text: string; type: 'success' | 'error' | 'info' } | null;
   showToast: (text: string, type?: 'success' | 'error' | 'info') => void;
 
-  // Authentication & Neon Auth state
+  // Application-owned authentication state
   isAuthenticated: boolean;
   isAuthModalOpen: boolean;
   authModalMode: 'login' | 'signup';
@@ -86,8 +82,8 @@ interface AppContextType {
   setPendingExamConfig: (cfg: CbtExamConfig | null) => void;
   openAuthModal: (mode?: 'login' | 'signup', reason?: 'general' | 'cbt_required') => void;
   closeAuthModal: () => void;
-  loginWithNeon: (emailOrReg: string, password?: string) => Promise<boolean>;
-  signupWithNeon: (data: {
+  loginWithAuth: (emailOrReg: string, password?: string) => Promise<boolean>;
+  signupWithAuth: (data: {
     name: string;
     email: string;
     password: string;
@@ -95,7 +91,7 @@ interface AppContextType {
     targetScore?: number;
     selectedSubjects?: string[];
   }) => Promise<boolean>;
-  requestPasswordResetWithNeon: (email: string) => Promise<boolean>;
+  requestPasswordReset: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
@@ -142,24 +138,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void hydrateQuestions(false);
   }, []);
 
-  type NeonSessionUser = {
-    id: string;
-    name: string;
-    email: string;
-    image?: string | null;
-  };
-
-  const createDefaultProfile = (authUser: NeonSessionUser): User => ({
-    id: authUser.id,
-    name: authUser.name,
-    email: authUser.email,
-    role: 'student',
-    avatarUrl: authUser.image || undefined,
-    jambRegNumber: `2026/UTME/${Math.floor(100000 + Math.random() * 900000)}`,
-    selectedSubjects: ['english', 'mathematics', 'physics', 'chemistry'],
-    targetScore: 320,
-  });
-
   const continuePendingExam = (authenticatedUser: User) => {
     if (!pendingExamConfig) return;
 
@@ -178,18 +156,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     continuePendingExam(authenticatedUser);
   };
 
-  // Neon Auth owns the session. Restore it on every page load instead of
-  // trusting a localStorage boolean or locally cached profile.
+  // Restore the server-owned session on every page load. The browser only
+  // holds an HttpOnly session cookie; it never stores a password or token.
   useEffect(() => {
     let cancelled = false;
 
-    const restoreNeonSession = async () => {
-      if (!neonAuthClient) return;
-
+    const restoreSession = async () => {
       try {
-        const sessionResult = await neonAuthClient.getSession();
-        const authUser = sessionResult.data?.user as NeonSessionUser | undefined;
-        if (!authUser) {
+        const sessionResult = await AuthService.getSession();
+        if (!sessionResult.success || !sessionResult.user) {
           if (!cancelled) {
             setIsAuthenticated(false);
             setUserState(GUEST_USER);
@@ -197,26 +172,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
-        const profileResult = await NeonApiService.getProfile();
-        const restoredUser = profileResult.success && profileResult.user
-          ? profileResult.user
-          : createDefaultProfile(authUser);
-
         if (!cancelled) {
-          setUserState(restoredUser);
+          setUserState(sessionResult.user);
           setIsAuthenticated(true);
-          void hydrateQuestions(restoredUser.role === 'admin');
+          void hydrateQuestions(sessionResult.user.role === 'admin');
         }
       } catch (error) {
         if (!cancelled) {
           setIsAuthenticated(false);
           setUserState(GUEST_USER);
-          console.warn('Neon Auth session restore failed:', error);
+          console.warn('App session restore failed:', error);
         }
       }
     };
 
-    void restoreNeonSession();
+    void restoreSession();
     return () => {
       cancelled = true;
     };
@@ -299,47 +269,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveView('exam_room');
   };
 
-  const loginWithNeon = async (email: string, password?: string): Promise<boolean> => {
+  const loginWithAuth = async (email: string, password?: string): Promise<boolean> => {
     if (!email.trim() || !password) {
-      showToast('Enter the email and password for your Neon account.', 'error');
+      showToast('Enter your email and password.', 'error');
       return false;
     }
 
-    try {
-      const auth = requireNeonAuthClient();
-      const result = await auth.signIn.email({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      if (result.error || !result.data?.user) {
-        showToast(getNeonAuthError(result.error, 'Neon sign-in failed.'), 'error');
-        return false;
-      }
-
-      const authUser = result.data.user as NeonSessionUser;
-      const profileResult = await NeonApiService.getProfile();
-      const loggedInUser = profileResult.success && profileResult.user
-        ? profileResult.user
-        : createDefaultProfile(authUser);
-
-      if (!profileResult.success) {
-        const savedProfile = await NeonApiService.saveProfile(loggedInUser);
-        if (!savedProfile.success) {
-          showToast(savedProfile.error || 'Unable to load your Neon profile.', 'error');
-          return false;
-        }
-      }
-
-      activateAuthenticatedUser(loggedInUser, `Welcome back, ${loggedInUser.name}! Authenticated with Neon.`);
-      return true;
-    } catch (error) {
-      showToast(getNeonAuthError(error, 'Unable to reach Neon Auth.'), 'error');
+    const result = await AuthService.signIn(email.trim().toLowerCase(), password);
+    if (!result.success || !result.user) {
+      showToast(result.error || 'Sign-in failed.', 'error');
       return false;
     }
+
+    activateAuthenticatedUser(result.user, `Welcome back, ${result.user.name}!`);
+    void hydrateQuestions(result.user.role === 'admin');
+    return true;
   };
 
-  const signupWithNeon = async (data: {
+  const signupWithAuth = async (data: {
     name: string;
     email: string;
     password: string;
@@ -351,84 +298,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Name, email, and password are required.', 'error');
       return false;
     }
-
-    try {
-      const auth = requireNeonAuthClient();
-      const result = await auth.signUp.email({
-        name: data.name.trim(),
-        email: data.email.trim().toLowerCase(),
-        password: data.password,
-      });
-
-      if (result.error || !result.data?.user) {
-        showToast(getNeonAuthError(result.error, 'Neon account creation failed.'), 'error');
-        return false;
-      }
-
-      const authUser = result.data.user as NeonSessionUser;
-      const profile = createDefaultProfile(authUser);
-      profile.jambRegNumber = data.jambRegNumber?.trim().toUpperCase() || profile.jambRegNumber;
-      profile.targetScore = data.targetScore || profile.targetScore;
-      profile.selectedSubjects = data.selectedSubjects || profile.selectedSubjects;
-
-      const savedProfile = await NeonApiService.saveProfile(profile);
-      if (!savedProfile.success || !savedProfile.user) {
-        showToast(
-          savedProfile.error || 'Neon account created, but the candidate profile could not be saved.',
-          'error',
-        );
-        return false;
-      }
-
-      activateAuthenticatedUser(
-        savedProfile.user,
-        `Account created on Neon! Welcome, ${savedProfile.user.name}.`,
-      );
-      return true;
-    } catch (error) {
-      showToast(getNeonAuthError(error, 'Unable to reach Neon Auth.'), 'error');
+    const result = await AuthService.signUp(data);
+    if (!result.success || !result.user) {
+      showToast(result.error || 'Account creation failed.', 'error');
       return false;
     }
+
+    activateAuthenticatedUser(result.user, `Account created! Welcome, ${result.user.name}.`);
+    void hydrateQuestions(result.user.role === 'admin');
+    return true;
   };
 
-  const requestPasswordResetWithNeon = async (email: string): Promise<boolean> => {
+  const requestPasswordReset = async (email: string): Promise<boolean> => {
     if (!email.trim()) {
-      showToast('Enter the email address for your Neon account.', 'error');
+      showToast('Enter your account email address.', 'error');
       return false;
     }
 
-    try {
-      const auth = requireNeonAuthClient();
-      const result = await auth.requestPasswordReset({
-        email: email.trim().toLowerCase(),
-        redirectTo: window.location.origin,
-      });
-
-      if (result.error) {
-        showToast(getNeonAuthError(result.error, 'Unable to request a password reset.'), 'error');
-        return false;
-      }
-
-      showToast('Neon sent a password reset link if the account exists.', 'success');
-      setIsAuthModalOpen(false);
-      return true;
-    } catch (error) {
-      showToast(getNeonAuthError(error, 'Unable to reach Neon Auth.'), 'error');
+    const result = await AuthService.requestPasswordReset(email.trim().toLowerCase());
+    if (!result.success) {
+      showToast(result.error || 'Password reset is unavailable.', 'error');
       return false;
     }
+
+    setIsAuthModalOpen(false);
+    showToast(result.message || 'Password reset requested.', 'success');
+    return true;
   };
 
   const logout = async () => {
-    try {
-      if (neonAuthClient) {
-        const result = await neonAuthClient.signOut();
-        if (result.error) {
-          showToast(getNeonAuthError(result.error, 'Neon sign-out failed.'), 'error');
-          return;
-        }
-      }
-    } catch (error) {
-      showToast(getNeonAuthError(error, 'Neon sign-out failed.'), 'error');
+    const result = await AuthService.signOut();
+    if (!result.success) {
+      showToast(result.error || 'Sign-out failed.', 'error');
       return;
     }
 
@@ -817,9 +718,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPendingExamConfig,
         openAuthModal,
         closeAuthModal,
-        loginWithNeon,
-        signupWithNeon,
-        requestPasswordResetWithNeon,
+        loginWithAuth,
+        signupWithAuth,
+        requestPasswordReset,
         logout,
       }}
     >

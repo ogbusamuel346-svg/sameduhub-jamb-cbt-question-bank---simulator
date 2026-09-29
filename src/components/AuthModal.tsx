@@ -16,16 +16,16 @@ import {
   Zap
 } from 'lucide-react';
 
-export const NeonAuthModal: React.FC = () => {
+export const AuthModal: React.FC = () => {
   const {
     isAuthModalOpen,
     authModalMode,
     authModalReason,
     pendingExamConfig,
     closeAuthModal,
-    loginWithNeon,
-    signupWithNeon,
-    requestPasswordResetWithNeon
+    loginWithAuth,
+    signupWithAuth,
+    requestPasswordReset
   } = useApp();
 
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(authModalMode);
@@ -69,7 +69,7 @@ export const NeonAuthModal: React.FC = () => {
     e.preventDefault();
     if (!emailOrReg.trim()) return;
     setIsSubmitting(true);
-    await loginWithNeon(emailOrReg, password);
+    await loginWithAuth(emailOrReg, password);
     setIsSubmitting(false);
   };
 
@@ -77,7 +77,7 @@ export const NeonAuthModal: React.FC = () => {
     e.preventDefault();
     if (!name.trim() || !signupEmail.trim() || !signupPassword) return;
     setIsSubmitting(true);
-    await signupWithNeon({
+    await signupWithAuth({
       name,
       email: signupEmail,
       password: signupPassword,
@@ -92,7 +92,7 @@ export const NeonAuthModal: React.FC = () => {
     e.preventDefault();
     if (!emailOrReg.trim()) return;
     setIsSubmitting(true);
-    await requestPasswordResetWithNeon(emailOrReg);
+    await requestPasswordReset(emailOrReg);
     setIsSubmitting(false);
   };
 
@@ -121,7 +121,7 @@ export const NeonAuthModal: React.FC = () => {
                 <span>Sam</span>
                 <span className="text-orange-400">EduHub</span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
-                  NEON AUTH
+                  SECURE ACCOUNT
                 </span>
               </div>
               <p className="text-xs text-blue-200 font-medium">
@@ -173,7 +173,7 @@ export const NeonAuthModal: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-slate-600 mt-1 leading-relaxed">
-                  To take realistic timed JAMB exams and save your scores to Neon, candidates must create a free student account. It takes only 10 seconds!
+                  To take realistic timed JAMB exams and save your scores, candidates must create a free student account. It takes only 10 seconds!
                 </p>
                 {pendingExamConfig && (
                   <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white border border-orange-200 text-orange-800 font-semibold text-[11px] shadow-2xs">
@@ -190,7 +190,7 @@ export const NeonAuthModal: React.FC = () => {
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">Reset your password</h2>
                 <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Neon will email a secure reset link to the address on your account.
+                  Password reset email delivery has not been configured yet. Contact the administrator if you need access restored.
                 </p>
               </div>
               <div>
@@ -215,7 +215,7 @@ export const NeonAuthModal: React.FC = () => {
                 className="w-full py-3.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm shadow-md shadow-blue-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <Mail className="w-4 h-4" />
-                <span>{isSubmitting ? 'Sending from Neon...' : 'Send reset link'}</span>
+                <span>{isSubmitting ? 'Requesting reset...' : 'Send reset link'}</span>
               </button>
               <button
                 type="button"
@@ -285,7 +285,7 @@ export const NeonAuthModal: React.FC = () => {
                 <Zap className="w-4 h-4 text-orange-400" />
                 <span>
                   {isSubmitting
-                    ? 'Authenticating with Neon...'
+                    ? 'Signing you in...'
                     : pendingExamConfig
                     ? 'Sign In & Launch CBT Exam'
                     : 'Sign In to CBT Portal'}
@@ -429,7 +429,7 @@ export const NeonAuthModal: React.FC = () => {
                 <Sparkles className="w-4 h-4 text-white" />
                 <span>
                   {isSubmitting
-                    ? 'Registering on Neon...'
+                    ? 'Creating your account...'
                     : pendingExamConfig
                     ? 'Create Account & Begin CBT Exam'
                     : 'Create Candidate Account'}
@@ -445,7 +445,7 @@ export const NeonAuthModal: React.FC = () => {
         <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>Neon Serverless Auth</span>
+            <span>App-managed authentication</span>
           </div>
           <div className="flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>

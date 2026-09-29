@@ -1,5 +1,4 @@
 import { Difficulty, Question, QuestionStatus, User, TestSession } from '../types/index.ts';
-import { getNeonAuthToken } from './neonAuth.ts';
 
 export interface NeonHealthResponse {
   success: boolean;
@@ -47,14 +46,8 @@ export interface QuestionGenerationRequest {
   count: number;
 }
 
-async function authenticatedHeaders(): Promise<HeadersInit> {
-  const token = await getNeonAuthToken();
-  if (!token) {
-    throw new Error('Your Neon Auth session has expired. Please sign in again.');
-  }
-
+function authenticatedHeaders(): HeadersInit {
   return {
-    Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
@@ -88,7 +81,8 @@ export const NeonApiService = {
   async getProfile(): Promise<AuthApiResponse> {
     try {
       const res = await fetch('/api/auth/profile', {
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
       });
       return await readResponse<AuthApiResponse>(res);
     } catch (err: any) {
@@ -103,7 +97,8 @@ export const NeonApiService = {
     try {
       const res = await fetch('/api/auth/profile', {
         method: 'POST',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
         body: JSON.stringify(profile),
       });
       return await readResponse<AuthApiResponse>(res);
@@ -119,7 +114,8 @@ export const NeonApiService = {
     try {
       const query = includeAll ? '?status=all' : '?status=approved';
       const res = await fetch(`/api/questions${query}`, {
-        headers: includeAll ? await authenticatedHeaders() : { Accept: 'application/json' },
+        credentials: includeAll ? 'include' : 'same-origin',
+        headers: includeAll ? authenticatedHeaders() : { Accept: 'application/json' },
       });
       return await readResponse<QuestionsApiResponse>(res);
     } catch (err: any) {
@@ -135,7 +131,8 @@ export const NeonApiService = {
     try {
       const res = await fetch('/api/questions/generate', {
         method: 'POST',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
         body: JSON.stringify(input),
       });
       return await readResponse<QuestionsApiResponse>(res);
@@ -152,7 +149,8 @@ export const NeonApiService = {
     try {
       const res = await fetch('/api/questions', {
         method: 'POST',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
         body: JSON.stringify(question),
       });
       return await readResponse<QuestionApiResponse>(res);
@@ -165,7 +163,8 @@ export const NeonApiService = {
     try {
       const res = await fetch(`/api/questions/${encodeURIComponent(question.id)}`, {
         method: 'PUT',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
         body: JSON.stringify(question),
       });
       return await readResponse<QuestionApiResponse>(res);
@@ -182,7 +181,8 @@ export const NeonApiService = {
     try {
       const res = await fetch(`/api/questions/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
         body: JSON.stringify({ status, reviewNotes }),
       });
       return await readResponse<QuestionApiResponse>(res);
@@ -195,7 +195,8 @@ export const NeonApiService = {
     try {
       const res = await fetch(`/api/questions/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
       });
       return await readResponse<{ success: boolean; error?: string }>(res);
     } catch (err: any) {
@@ -207,7 +208,8 @@ export const NeonApiService = {
     try {
       const res = await fetch('/api/test-sessions', {
         method: 'POST',
-        headers: await authenticatedHeaders(),
+        credentials: 'include',
+        headers: authenticatedHeaders(),
         body: JSON.stringify(session),
       });
       const data = await readResponse<{ success: boolean }>(res);
