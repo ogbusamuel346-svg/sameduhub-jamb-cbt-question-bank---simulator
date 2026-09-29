@@ -8,13 +8,12 @@ import { CbtResultsModal } from './components/CbtResultsModal.tsx';
 import { AdminQuestionManager } from './components/AdminQuestionManager.tsx';
 import { AdminReviewQueue } from './components/AdminReviewQueue.tsx';
 import { CandidateHistoryView } from './components/CandidateHistoryView.tsx';
-import { NeonSyncModal } from './components/NeonSyncModal.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
 import { GraduationCap, ShieldCheck, Heart, AlertCircle, CheckCircle, Info } from 'lucide-react';
 
 const MainContent: React.FC = () => {
   const { activeView, toastMessage, user, isAuthenticated, openAuthModal, setActiveView } = useApp();
-  const isAdminView = activeView === 'admin_questions' || activeView === 'admin_review' || activeView === 'neon_settings';
+  const isAdminView = activeView === 'admin_questions' || activeView === 'admin_review';
   const hasAdminAccess = isAuthenticated && user.role === 'admin';
 
   return (
@@ -73,7 +72,6 @@ const MainContent: React.FC = () => {
         {activeView === 'admin_questions' && hasAdminAccess && <AdminQuestionManager />}
         {activeView === 'admin_review' && hasAdminAccess && <AdminReviewQueue />}
         {activeView === 'history' && <CandidateHistoryView />}
-        {activeView === 'neon_settings' && hasAdminAccess && <NeonSyncModal />}
       </main>
 
       {/* Footer (hidden during exam mode) */}
@@ -96,11 +94,11 @@ const MainContent: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-6 text-xs font-semibold">
-                <span>Database: <strong className="text-emerald-400 font-mono">Neon Serverless Postgres</strong></span>
+                <span>Secure sign-in</span>
                 <span>•</span>
-                <span>Auth: <strong className="text-blue-300">Supabase Auth</strong></span>
+                <span>Private progress tracking</span>
                 <span>•</span>
-                <span>Role-Based Access: <strong className="text-orange-400">Admin & Student</strong></span>
+                <span>Tutor-reviewed practice</span>
               </div>
             </div>
 

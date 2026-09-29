@@ -74,7 +74,7 @@ export const CandidateHistoryView: React.FC = () => {
                 Sign In to Save & View Your Examination Records
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Results from previous CBT practice sessions are safely stored on Neon when you create a student profile.
+                Results from previous CBT practice sessions are safely stored when you create a student profile.
               </p>
             </div>
           </div>

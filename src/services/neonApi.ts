@@ -60,7 +60,7 @@ async function authenticatedHeaders(): Promise<HeadersInit> {
 async function readResponse<T>(res: Response): Promise<T> {
   const data = (await res.json()) as T & { error?: string; message?: string };
   if (!res.ok) {
-    throw new Error(data.error || data.message || `Neon API request failed (${res.status}).`);
+    throw new Error(data.error || data.message || `The application service request failed (${res.status}).`);
   }
   return data;
 }
@@ -77,7 +77,7 @@ export const NeonApiService = {
       return {
         success: false,
         isConnected: false,
-        error: err.message || 'Network error reaching Neon proxy',
+        error: err.message || 'Network error reaching the application service.',
       };
     }
   },
@@ -92,7 +92,7 @@ export const NeonApiService = {
     } catch (err: any) {
       return {
         success: false,
-        error: err.message || 'Unable to load your Neon profile.',
+        error: err.message || 'Unable to load your profile.',
       };
     }
   },
@@ -109,7 +109,7 @@ export const NeonApiService = {
     } catch (err: any) {
       return {
         success: false,
-        error: err.message || 'Unable to save your Neon profile.',
+        error: err.message || 'Unable to save your profile.',
       };
     }
   },
@@ -126,7 +126,7 @@ export const NeonApiService = {
       return {
         success: false,
         questions: [],
-        error: err.message || 'Unable to load questions from Neon.',
+        error: err.message || 'Unable to load questions.',
       };
     }
   },
@@ -159,7 +159,7 @@ export const NeonApiService = {
       });
       return await readResponse<QuestionApiResponse>(res);
     } catch (err: any) {
-      return { success: false, error: err.message || 'Unable to save question to Neon.' };
+      return { success: false, error: err.message || 'Unable to save question.' };
     }
   },
 
@@ -173,7 +173,7 @@ export const NeonApiService = {
       });
       return await readResponse<QuestionApiResponse>(res);
     } catch (err: any) {
-      return { success: false, error: err.message || 'Unable to update question in Neon.' };
+      return { success: false, error: err.message || 'Unable to update question.' };
     }
   },
 
@@ -191,7 +191,7 @@ export const NeonApiService = {
       });
       return await readResponse<QuestionApiResponse>(res);
     } catch (err: any) {
-      return { success: false, error: err.message || 'Unable to update question status in Neon.' };
+      return { success: false, error: err.message || 'Unable to update question status.' };
     }
   },
 
@@ -204,7 +204,7 @@ export const NeonApiService = {
       });
       return await readResponse<{ success: boolean; error?: string }>(res);
     } catch (err: any) {
-      return { success: false, error: err.message || 'Unable to delete question from Neon.' };
+      return { success: false, error: err.message || 'Unable to delete question.' };
     }
   },
 
@@ -219,7 +219,7 @@ export const NeonApiService = {
       const data = await readResponse<{ success: boolean }>(res);
       return !!data.success;
     } catch (error) {
-      console.warn('Unable to save session to Neon:', error);
+      console.warn('Unable to save completed session:', error);
       return false;
     }
   }

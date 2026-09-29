@@ -8,7 +8,6 @@ import {
   Mail,
   User as UserIcon,
   Sparkles,
-  Database,
   ArrowRight,
   CheckCircle,
   Eye,
@@ -509,16 +508,9 @@ export const AuthModal: React.FC = () => {
 
         </div>
 
-        {/* Modal Footer with Neon Status */}
-        <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>Supabase Auth • Neon profile sync</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Postgres Connected</span>
-          </div>
+        {/* Keep infrastructure details out of the candidate-facing auth flow. */}
+        <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 text-center text-xs text-slate-500">
+          Secure account access for your JAMB practice journey.
         </div>
       </div>
     </div>

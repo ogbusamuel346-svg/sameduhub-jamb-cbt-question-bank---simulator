@@ -87,7 +87,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
             <div className="text-xs leading-relaxed">
               <strong className="block text-sm mb-1">AI practice drafts — human review required</strong>
               Generated content is original practice material, not official JAMB questions and not endorsed by JAMB.
-              Review, edit, and approve each item before it is saved to Neon or shown in candidate tests.
+              Review, edit, and approve each item before it is saved to the question bank or shown in candidate tests.
               <a className="block mt-1 font-semibold underline" href={JAMB_SYLLABUS_SOURCE_URL} target="_blank" rel="noreferrer">
                 JAMB IBASS syllabus reference
               </a>
@@ -150,7 +150,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-extrabold text-slate-900">Review generated drafts</h3>
-                  <p className="text-xs text-slate-500">Approve saves an item to Neon; reject keeps it out of the live question bank.</p>
+                  <p className="text-xs text-slate-500">Approve saves an item to the question bank; reject keeps it out of live candidate tests.</p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-bold">{generatedQuestions.length} drafts</span>
@@ -194,7 +194,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
                       <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
                         <button onClick={() => setEditingQuestion(question)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
                         <button onClick={() => rejectQuestion(question.id, 'Rejected during admin review; revise the stem, options, or explanation before regenerating.')} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold border border-red-200"><XCircle className="w-3.5 h-3.5" /> Reject</button>
-                        <button onClick={() => approveQuestion(question.id)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> Approve & save to Neon</button>
+                        <button onClick={() => approveQuestion(question.id)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> Approve & save</button>
                       </div>
                     )}
                   </article>

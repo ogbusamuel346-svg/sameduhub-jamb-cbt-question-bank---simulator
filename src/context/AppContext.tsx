@@ -413,9 +413,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     StorageService.saveNeonConfig(updated);
 
     if (health.isConnected) {
-      showToast('Successfully connected to Neon PostgreSQL database!', 'success');
+      showToast('The question service is connected.', 'success');
     } else {
-      showToast(health.error || 'Could not reach the Neon database.', 'error');
+      showToast(health.error || 'Could not reach the question service.', 'error');
     }
 
     return health.isConnected;
@@ -444,7 +444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isAdminSession) {
       void NeonApiService.createQuestion(newQ).then(result => {
-        if (!result.success) reportQuestionSyncError(result.error, 'Question was created locally but could not be saved to Neon.');
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was created locally but could not be saved.');
       });
     }
   };
@@ -458,7 +458,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isAdminSession && !isUnsavedDraft(questionToSave.id)) {
       void NeonApiService.updateQuestion(questionToSave).then(result => {
-        if (!result.success) reportQuestionSyncError(result.error, 'Question was updated locally but could not be saved to Neon.');
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was updated locally but could not be saved.');
       });
     }
   };
@@ -471,7 +471,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (isAdminSession && !isUnsavedDraft(id)) {
       void NeonApiService.deleteQuestion(id).then(result => {
-        if (!result.success) reportQuestionSyncError(result.error, 'Question was removed locally but could not be deleted from Neon.');
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was removed locally but could not be deleted.');
       });
     }
   };
@@ -494,7 +494,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isAdminSession) {
       // Upsert makes approval work for both unsaved AI drafts and local seed items.
       void NeonApiService.createQuestion(approvedQuestion).then(result => {
-        if (!result.success) reportQuestionSyncError(result.error, 'Question was approved locally but could not be saved to Neon.');
+        if (!result.success) reportQuestionSyncError(result.error, 'Question was approved locally but could not be saved.');
       });
     }
   };
@@ -518,7 +518,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isAdminSession && !isUnsavedDraft(id)) {
       void NeonApiService.updateQuestionStatus(id, 'rejected', notes).then(result => {
         if (!result.success && !result.error?.includes('not found')) {
-          reportQuestionSyncError(result.error, 'Question was rejected locally but could not be updated in Neon.');
+          reportQuestionSyncError(result.error, 'Question was rejected locally but could not be updated.');
         }
       });
     }
@@ -540,7 +540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isAdminSession && approvedQuestions.length > 0) {
       void Promise.all(approvedQuestions.map(question => NeonApiService.createQuestion(question))).then(results => {
         const failed = results.find(result => !result.success);
-        if (failed) reportQuestionSyncError(failed.error, 'Some approved questions could not be saved to Neon.');
+        if (failed) reportQuestionSyncError(failed.error, 'Some approved questions could not be saved.');
       });
     }
   };
@@ -554,7 +554,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isAdminSession) {
       void Promise.all(ids.filter(id => !isUnsavedDraft(id)).map(id => NeonApiService.deleteQuestion(id))).then(results => {
         const failed = results.find(result => !result.success);
-        if (failed) reportQuestionSyncError(failed.error, 'Some questions could not be deleted from Neon.');
+        if (failed) reportQuestionSyncError(failed.error, 'Some questions could not be deleted.');
       });
     }
   };
@@ -590,7 +590,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isAdminSession) {
         void Promise.all(newItems.map(question => NeonApiService.createQuestion(question))).then(results => {
           const failed = results.find(result => !result.success);
-          if (failed) reportQuestionSyncError(failed.error, 'Some imported questions could not be saved to Neon.');
+        if (failed) reportQuestionSyncError(failed.error, 'Some imported questions could not be saved.');
         });
       }
       return true;

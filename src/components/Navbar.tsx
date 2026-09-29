@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   CheckCircle2,
-  Database
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -24,8 +23,7 @@ export const Navbar: React.FC = () => {
     logout,
     activeView,
     setActiveView,
-    questions,
-    neonConfig
+    questions
   } = useApp();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -179,17 +177,6 @@ export const Navbar: React.FC = () => {
                     )}
 
                     <div className="border-t border-slate-700/60 pt-2 flex flex-col gap-1">
-                      <button
-                        onClick={() => {
-                          handleNavClick('neon_settings');
-                          setIsProfileDropdownOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 p-2 rounded-lg text-xs text-slate-300 hover:text-white hover:bg-slate-700/80 cursor-pointer"
-                      >
-                        <Database className="w-4 h-4 text-blue-400" />
-                        <span>Neon DB Status</span>
-                      </button>
-
                       <button
                         onClick={() => {
                           logout();

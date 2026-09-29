@@ -1214,7 +1214,7 @@ export async function createApiApp() {
         questions: result.rows.map(questionFromRow),
       });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to load questions from Neon.');
+      return respondWithError(res, error, 'Unable to load questions.');
     }
   });
 
@@ -1252,7 +1252,7 @@ export async function createApiApp() {
       return res.json({
         success: true,
         questions,
-        message: `Generated ${questions.length} AI practice drafts across ${scope === 'whole_subject' ? 'the full subject syllabus' : 'the selected topic'}. Nothing has been saved to Neon yet.`,
+        message: `Generated ${questions.length} AI practice drafts across ${scope === 'whole_subject' ? 'the full subject syllabus' : 'the selected topic'}. Nothing has been saved yet.`,
       });
     } catch (error: any) {
       return respondWithError(res, error, 'Unable to generate question drafts.');
@@ -1319,7 +1319,7 @@ export async function createApiApp() {
 
       return res.status(201).json({ success: true, question: questionFromRow(result.rows[0]) });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to save question to Neon.');
+      return respondWithError(res, error, 'Unable to save question.');
     }
   });
 
@@ -1364,7 +1364,7 @@ export async function createApiApp() {
       if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Question not found.' });
       return res.json({ success: true, question: questionFromRow(result.rows[0]) });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to update question in Neon.');
+      return respondWithError(res, error, 'Unable to update question.');
     }
   });
 
@@ -1397,7 +1397,7 @@ export async function createApiApp() {
       if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Question not found.' });
       return res.json({ success: true, question: questionFromRow(result.rows[0]) });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to update question status in Neon.');
+      return respondWithError(res, error, 'Unable to update question status.');
     }
   });
 
@@ -1407,7 +1407,7 @@ export async function createApiApp() {
       await pool.query('DELETE FROM questions WHERE id = $1', [req.params.id]);
       return res.json({ success: true });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to delete question from Neon.');
+      return respondWithError(res, error, 'Unable to delete question.');
     }
   });
 
@@ -1458,7 +1458,7 @@ export async function createApiApp() {
         ]
       );
 
-      return res.json({ success: true, message: 'Session saved to Neon database.' });
+      return res.json({ success: true, message: 'Session saved successfully.' });
     } catch (err: any) {
       if (err instanceof HttpError) {
         return sendUnauthorized(res, err.message);
