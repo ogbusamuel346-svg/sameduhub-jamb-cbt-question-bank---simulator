@@ -14,7 +14,7 @@ import {
   GUEST_USER
 } from '../services/storage.ts';
 import { NeonApiService } from '../services/neonApi.ts';
-import { AuthService } from '../services/auth.ts';
+import { AuthService, onSupabaseAuthStateChange } from '../services/auth.ts';
 
 export type AppView =
   | 'dashboard'
@@ -73,7 +73,7 @@ interface AppContextType {
   toastMessage: { text: string; type: 'success' | 'error' | 'info' } | null;
   showToast: (text: string, type?: 'success' | 'error' | 'info') => void;
 
-  // Application-owned authentication state
+  // Supabase authentication state
   isAuthenticated: boolean;
   isAuthModalOpen: boolean;
   authModalMode: 'login' | 'signup' | 'reset';
@@ -157,12 +157,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     continuePendingExam(authenticatedUser);
   };
 
-  // Restore the server-owned session on every page load. The browser only
-  // holds an HttpOnly session cookie; it never stores a password or token.
+  // Restore the Supabase session on every page load. The browser stores only
+  // the Supabase session tokens; the API independently verifies each bearer
+  // token before reading or writing Neon data.
   useEffect(() => {
     let cancelled = false;
 
-    if (new URLSearchParams(window.location.search).has('resetToken')) {
+    if (new URLSearchParams(window.location.search).get('auth') === 'recovery') {
       setAuthModalMode('reset');
       setIsAuthModalOpen(true);
     }
@@ -192,9 +193,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
+    const unsubscribe = onSupabaseAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthModalMode('reset');
+        setIsAuthModalOpen(true);
+        return;
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+        setUserState(GUEST_USER);
+        return;
+      }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        void restoreSession();
+      }
+    });
+
     void restoreSession();
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -305,9 +325,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
     const result = await AuthService.signUp(data);
-    if (!result.success || !result.user) {
+    if (!result.success) {
       showToast(result.error || 'Account creation failed.', 'error');
       return false;
+    }
+
+    if (!result.user) {
+      setIsAuthModalOpen(false);
+      showToast(result.message || 'Check your email to confirm your account.', 'success');
+      return true;
     }
 
     activateAuthenticatedUser(result.user, `Account created! Welcome, ${result.user.name}.`);

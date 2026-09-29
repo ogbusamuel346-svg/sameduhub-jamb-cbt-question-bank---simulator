@@ -98,7 +98,7 @@ const MainContent: React.FC = () => {
               <div className="flex items-center gap-6 text-xs font-semibold">
                 <span>Database: <strong className="text-emerald-400 font-mono">Neon Serverless Postgres</strong></span>
                 <span>•</span>
-                <span>Auth: <strong className="text-blue-300">App-managed sessions</strong></span>
+                <span>Auth: <strong className="text-blue-300">Supabase Auth</strong></span>
                 <span>•</span>
                 <span>Role-Based Access: <strong className="text-orange-400">Admin & Student</strong></span>
               </div>

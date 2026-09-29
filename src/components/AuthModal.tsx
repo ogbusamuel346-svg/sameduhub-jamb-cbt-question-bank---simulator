@@ -38,11 +38,6 @@ export const AuthModal: React.FC = () => {
   const [signupPassword, setSignupPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [resetToken, setResetToken] = useState<string | null>(() => (
-    typeof window === 'undefined'
-      ? null
-      : new URLSearchParams(window.location.search).get('resetToken')
-  ));
   const [jambReg, setJambReg] = useState('');
   const [targetScore, setTargetScore] = useState(320);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([
@@ -106,12 +101,12 @@ export const AuthModal: React.FC = () => {
 
   const handlePasswordResetConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resetToken || !newPassword || newPassword !== confirmNewPassword) {
+    if (!newPassword || newPassword !== confirmNewPassword) {
       return;
     }
 
     setIsSubmitting(true);
-    await resetPassword(resetToken, newPassword);
+    await resetPassword('', newPassword);
     setIsSubmitting(false);
   };
 
@@ -518,7 +513,7 @@ export const AuthModal: React.FC = () => {
         <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>App-managed authentication</span>
+            <span>Supabase Auth • Neon profile sync</span>
           </div>
           <div className="flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>

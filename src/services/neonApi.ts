@@ -1,4 +1,5 @@
 import { Difficulty, Question, QuestionStatus, User, TestSession } from '../types/index.ts';
+import { getSupabaseAccessToken } from './auth.ts';
 
 export interface NeonHealthResponse {
   success: boolean;
@@ -46,10 +47,12 @@ export interface QuestionGenerationRequest {
   count: number;
 }
 
-function authenticatedHeaders(): HeadersInit {
+async function authenticatedHeaders(): Promise<HeadersInit> {
+  const accessToken = await getSupabaseAccessToken();
   return {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 }
 
@@ -82,7 +85,7 @@ export const NeonApiService = {
     try {
       const res = await fetch('/api/auth/profile', {
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
       });
       return await readResponse<AuthApiResponse>(res);
     } catch (err: any) {
@@ -98,7 +101,7 @@ export const NeonApiService = {
       const res = await fetch('/api/auth/profile', {
         method: 'POST',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
         body: JSON.stringify(profile),
       });
       return await readResponse<AuthApiResponse>(res);
@@ -115,7 +118,7 @@ export const NeonApiService = {
       const query = includeAll ? '?status=all' : '?status=approved';
       const res = await fetch(`/api/questions${query}`, {
         credentials: includeAll ? 'include' : 'same-origin',
-        headers: includeAll ? authenticatedHeaders() : { Accept: 'application/json' },
+        headers: includeAll ? await authenticatedHeaders() : { Accept: 'application/json' },
       });
       return await readResponse<QuestionsApiResponse>(res);
     } catch (err: any) {
@@ -132,7 +135,7 @@ export const NeonApiService = {
       const res = await fetch('/api/questions/generate', {
         method: 'POST',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
         body: JSON.stringify(input),
       });
       return await readResponse<QuestionsApiResponse>(res);
@@ -150,7 +153,7 @@ export const NeonApiService = {
       const res = await fetch('/api/questions', {
         method: 'POST',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
         body: JSON.stringify(question),
       });
       return await readResponse<QuestionApiResponse>(res);
@@ -164,7 +167,7 @@ export const NeonApiService = {
       const res = await fetch(`/api/questions/${encodeURIComponent(question.id)}`, {
         method: 'PUT',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
         body: JSON.stringify(question),
       });
       return await readResponse<QuestionApiResponse>(res);
@@ -182,7 +185,7 @@ export const NeonApiService = {
       const res = await fetch(`/api/questions/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
         body: JSON.stringify({ status, reviewNotes }),
       });
       return await readResponse<QuestionApiResponse>(res);
@@ -196,7 +199,7 @@ export const NeonApiService = {
       const res = await fetch(`/api/questions/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
       });
       return await readResponse<{ success: boolean; error?: string }>(res);
     } catch (err: any) {
@@ -209,7 +212,7 @@ export const NeonApiService = {
       const res = await fetch('/api/test-sessions', {
         method: 'POST',
         credentials: 'include',
-        headers: authenticatedHeaders(),
+        headers: await authenticatedHeaders(),
         body: JSON.stringify(session),
       });
       const data = await readResponse<{ success: boolean }>(res);

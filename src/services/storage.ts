@@ -106,7 +106,7 @@ export const StorageService = {
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. Candidate profiles and application-owned credentials
+-- 1. Candidate profiles linked to Supabase Auth identities
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(64) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,

@@ -18,7 +18,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Neon still provides Postgres, but authentication is owned by this app.
+// Neon still provides Postgres, while Supabase Auth owns identity and sessions.
 const NEON_PG_URL = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 const neonDatabaseUrl = (() => {
   if (!NEON_PG_URL) return null;
@@ -36,6 +36,12 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 });
+
+const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY
+  || process.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  || process.env.VITE_SUPABASE_ANON_KEY
+  || '';
 
 const SESSION_COOKIE_NAME = 'sameduhub_session';
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -107,6 +113,10 @@ async function initNeonDatabase() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS jamb_reg_number VARCHAR(64);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_user_id VARCHAR(128);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_supabase_user_id
+        ON users(supabase_user_id)
+        WHERE supabase_user_id IS NOT NULL;
 
       CREATE TABLE IF NOT EXISTS auth_sessions (
         token_hash CHAR(64) PRIMARY KEY,
@@ -256,31 +266,130 @@ async function createSession(userId: string, res: Response, executor: DatabaseEx
   setSessionCookie(res, token);
 }
 
-async function authenticateRequest(req: Request): Promise<SessionIdentity> {
-  const token = getSessionToken(req);
-  if (!token) throw new HttpError(401, 'App session required.');
+function getSupabaseAccessToken(req: Request) {
+  const authorization = req.header('authorization') || '';
+  return authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length).trim()
+    : '';
+}
 
-  const result = await pool.query(
+async function getSupabaseUser(accessToken: string) {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new HttpError(503, 'Supabase Auth is not configured on the server.');
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      Accept: 'application/json',
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new HttpError(401, 'Invalid or expired Supabase session.');
+  }
+
+  return await response.json() as {
+    id: string;
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+  };
+}
+
+async function ensureSupabaseProfile(authUser: {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+}) {
+  const email = (authUser.email || '').trim().toLowerCase();
+  if (!email) throw new HttpError(401, 'Your Supabase account has no email address.');
+
+  const metadata = authUser.user_metadata || {};
+  const name = typeof metadata.full_name === 'string' && metadata.full_name.trim()
+    ? metadata.full_name.trim()
+    : typeof metadata.name === 'string' && metadata.name.trim()
+    ? metadata.name.trim()
+    : email.split('@')[0];
+  const jambRegNumber = typeof metadata.jamb_reg_number === 'string' ? metadata.jamb_reg_number.trim().toUpperCase() : '';
+  const targetScore = Number(metadata.target_score);
+  const selectedSubjects = Array.isArray(metadata.selected_subjects)
+    ? metadata.selected_subjects.filter((subject: unknown): subject is string => typeof subject === 'string').slice(0, 4)
+    : [];
+
+  const existing = await pool.query(
     `SELECT
-       u.id,
-       u.name,
-       u.email,
-       u.role,
-       u.jamb_reg_number AS "jambRegNumber",
-       u.target_score AS "targetScore",
-       u.avatar_url AS "avatarUrl",
-       u.selected_subjects AS "selectedSubjects",
-       u.created_at AS "createdAt"
-     FROM auth_sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = $1 AND s.expires_at > NOW()
+       id,
+       name,
+       email,
+       role,
+       jamb_reg_number AS "jambRegNumber",
+       target_score AS "targetScore",
+       avatar_url AS "avatarUrl",
+       selected_subjects AS "selectedSubjects",
+       created_at AS "createdAt",
+       supabase_user_id AS "supabaseUserId"
+     FROM users
+     WHERE supabase_user_id = $1 OR lower(email) = $2
+     ORDER BY CASE WHEN supabase_user_id = $1 THEN 0 ELSE 1 END
      LIMIT 1`,
-    [hashSessionToken(token)],
+    [authUser.id, email],
   );
 
-  if (result.rows.length === 0) throw new HttpError(401, 'Invalid or expired app session.');
+  if (existing.rows[0]) {
+    const row = existing.rows[0];
+    if (row.supabaseUserId !== authUser.id) {
+      await pool.query(
+        `UPDATE users
+         SET supabase_user_id = $1, email = $2
+         WHERE id = $3`,
+        [authUser.id, email, row.id],
+      );
+      row.supabaseUserId = authUser.id;
+      row.email = email;
+    }
+    return row;
+  }
 
-  const user = profileFromRow(result.rows[0]);
+  const role = configuredAdminEmails.has(email) ? 'admin' : 'student';
+  const result = await pool.query(
+    `INSERT INTO users (
+       id, name, email, role, supabase_user_id, jamb_reg_number,
+       target_score, avatar_url, selected_subjects
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING
+       id,
+       name,
+       email,
+       role,
+       jamb_reg_number AS "jambRegNumber",
+       target_score AS "targetScore",
+       avatar_url AS "avatarUrl",
+       selected_subjects AS "selectedSubjects",
+       created_at AS "createdAt"`,
+    [
+      authUser.id,
+      name.slice(0, 255),
+      email,
+      role,
+      authUser.id,
+      jambRegNumber || `2026/UTME/${Math.floor(100000 + Math.random() * 900000)}`,
+      Number.isFinite(targetScore) && targetScore >= 200 && targetScore <= 400 ? Math.round(targetScore) : 320,
+      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+      selectedSubjects.length > 0 ? selectedSubjects : ['english', 'mathematics', 'physics', 'chemistry'],
+    ],
+  );
+
+  return result.rows[0];
+}
+
+async function authenticateRequest(req: Request): Promise<SessionIdentity> {
+  const token = getSupabaseAccessToken(req);
+  if (!token) throw new HttpError(401, 'Supabase session required.');
+
+  const authUser = await getSupabaseUser(token);
+  const row = await ensureSupabaseProfile(authUser);
+  const user = profileFromRow(row);
   return {
     sub: user.id,
     email: user.email,
