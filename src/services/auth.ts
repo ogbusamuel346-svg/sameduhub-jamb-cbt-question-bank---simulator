@@ -154,12 +154,12 @@ async function getSession() {
   return currentSession;
 }
 
-async function setAuthenticatedSession(session: SupabaseSession, event: AuthEvent = 'SIGNED_IN') {
+async function setAuthenticatedSession(session: SupabaseSession, event: AuthEvent | null = 'SIGNED_IN') {
   const normalized = normalizeSession(session);
   const user = await fetchSupabaseUser(normalized.access_token);
   const withUser = { ...normalized, user };
   persistSession(withUser);
-  notify(event, withUser);
+  if (event) notify(event, withUser);
   return withUser;
 }
 
@@ -230,8 +230,10 @@ export const AuthService = {
       const session = await setAuthenticatedSession(await authRequest<SupabaseSession>('token?grant_type=password', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
-      }));
-      return await loadProfile(session.access_token);
+      }), null);
+      const profile = await loadProfile(session.access_token);
+      notify('SIGNED_IN', session);
+      return profile;
     } catch (error: any) {
       return { success: false, error: error?.message || 'Unable to sign you in with Supabase.' };
     }

@@ -354,35 +354,78 @@ async function ensureSupabaseProfile(authUser: {
   }
 
   const role = configuredAdminEmails.has(email) ? 'admin' : 'student';
-  const result = await pool.query(
-    `INSERT INTO users (
-       id, name, email, role, supabase_user_id, jamb_reg_number,
-       target_score, avatar_url, selected_subjects
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     RETURNING
-       id,
-       name,
-       email,
-       role,
-       jamb_reg_number AS "jambRegNumber",
-       target_score AS "targetScore",
-       avatar_url AS "avatarUrl",
-       selected_subjects AS "selectedSubjects",
-       created_at AS "createdAt"`,
-    [
-      authUser.id,
-      name.slice(0, 255),
-      email,
-      role,
-      authUser.id,
-      jambRegNumber || `2026/UTME/${Math.floor(100000 + Math.random() * 900000)}`,
-      Number.isFinite(targetScore) && targetScore >= 200 && targetScore <= 400 ? Math.round(targetScore) : 320,
-      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-      selectedSubjects.length > 0 ? selectedSubjects : ['english', 'mathematics', 'physics', 'chemistry'],
-    ],
-  );
+  try {
+    const result = await pool.query(
+      `INSERT INTO users (
+         id, name, email, role, supabase_user_id, jamb_reg_number,
+         target_score, avatar_url, selected_subjects
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING
+         id,
+         name,
+         email,
+         role,
+         jamb_reg_number AS "jambRegNumber",
+         target_score AS "targetScore",
+         avatar_url AS "avatarUrl",
+         selected_subjects AS "selectedSubjects",
+         created_at AS "createdAt"`,
+      [
+        authUser.id,
+        name.slice(0, 255),
+        email,
+        role,
+        authUser.id,
+        jambRegNumber || `2026/UTME/${Math.floor(100000 + Math.random() * 900000)}`,
+        Number.isFinite(targetScore) && targetScore >= 200 && targetScore <= 400 ? Math.round(targetScore) : 320,
+        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+        selectedSubjects.length > 0 ? selectedSubjects : ['english', 'mathematics', 'physics', 'chemistry'],
+      ],
+    );
 
-  return result.rows[0];
+    return result.rows[0];
+  } catch (error: any) {
+    // Sign-in and session restoration can ask for the profile concurrently.
+    // If another request created it first, read that row instead of returning
+    // a misleading generic profile-load error to the browser.
+    if (error?.code !== '23505') throw error;
+
+    const retry = await pool.query(
+      `SELECT
+         id,
+         name,
+         email,
+         role,
+         jamb_reg_number AS "jambRegNumber",
+         target_score AS "targetScore",
+         avatar_url AS "avatarUrl",
+         selected_subjects AS "selectedSubjects",
+         created_at AS "createdAt",
+         supabase_user_id AS "supabaseUserId"
+       FROM users
+       WHERE supabase_user_id = $1 OR lower(email) = $2
+       ORDER BY CASE WHEN supabase_user_id = $1 THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [authUser.id, email],
+    );
+
+    if (retry.rows[0]) {
+      const row = retry.rows[0];
+      if (row.supabaseUserId !== authUser.id) {
+        await pool.query(
+          `UPDATE users
+           SET supabase_user_id = $1, email = $2
+           WHERE id = $3`,
+          [authUser.id, email, row.id],
+        );
+        row.supabaseUserId = authUser.id;
+        row.email = email;
+      }
+      return row;
+    }
+
+    throw error;
+  }
 }
 
 async function authenticateRequest(req: Request): Promise<SessionIdentity> {
