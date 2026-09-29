@@ -1,4 +1,4 @@
-import { Difficulty, Question, QuestionStatus, User, TestSession } from '../types/index.ts';
+import { GenerationDifficulty, Question, QuestionGenerationScope, QuestionStatus, User, TestSession } from '../types/index.ts';
 import { getSupabaseAccessToken } from './auth.ts';
 
 export interface NeonHealthResponse {
@@ -43,7 +43,8 @@ export interface QuestionApiResponse {
 export interface QuestionGenerationRequest {
   subjectId: string;
   topic: string;
-  difficulty: Difficulty;
+  scope?: QuestionGenerationScope;
+  difficulty: GenerationDifficulty;
   count: number;
 }
 

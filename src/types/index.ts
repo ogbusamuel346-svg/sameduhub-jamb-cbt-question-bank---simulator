@@ -1,4 +1,6 @@
 export type Difficulty = 'easy' | 'medium' | 'hard';
+export type GenerationDifficulty = Difficulty | 'mixed';
+export type QuestionGenerationScope = 'topic' | 'whole_subject';
 export type QuestionStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 export type QuestionSource = 'manual' | 'ai_generated';
 export type UserRole = 'admin' | 'reviewer' | 'student';

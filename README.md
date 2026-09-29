@@ -43,8 +43,10 @@ Do not put a database password in browser code or commit it to `.env.example`.
 ## Admin Question Generator
 
 Admins can open **Question Bank → AI Generator** to choose a JAMB subject,
-syllabus topic, difficulty, and 1–50 questions. Generation uses the
-server-side `GEMINI_API_KEY` and the JAMB IBASS syllabus reference at
+the full subject syllabus or one syllabus topic, a fixed or balanced difficulty,
+and 1–60 questions. Whole-subject generation distributes the batch across all
+configured syllabus topics. Generation uses the server-side `GEMINI_API_KEY`,
+Google Search grounding, and the JAMB IBASS syllabus reference at
 https://ibass.jamb.gov.ng/.
 
 Generated items are clearly labeled as AI practice drafts, are not official

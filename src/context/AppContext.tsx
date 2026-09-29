@@ -5,7 +5,9 @@ import {
   User,
   NeonConfig,
   OptionKey,
-  SubjectScoreBreakdown
+  SubjectScoreBreakdown,
+  GenerationDifficulty,
+  QuestionGenerationScope,
 } from '../types/index.ts';
 import { JAMB_SUBJECTS } from '../data/subjects.ts';
 import {
@@ -60,7 +62,8 @@ interface AppContextType {
   generateQuestionDrafts: (input: {
     subjectId: string;
     topic: string;
-    difficulty: 'easy' | 'medium' | 'hard';
+    scope?: QuestionGenerationScope;
+    difficulty: GenerationDifficulty;
     count: number;
   }) => Promise<Question[]>;
 
@@ -601,7 +604,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const generateQuestionDrafts = async (input: {
     subjectId: string;
     topic: string;
-    difficulty: 'easy' | 'medium' | 'hard';
+    scope?: QuestionGenerationScope;
+    difficulty: GenerationDifficulty;
     count: number;
   }): Promise<Question[]> => {
     if (!isAdminSession) {

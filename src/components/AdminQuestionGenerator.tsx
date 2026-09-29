@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from '../data/subjects.ts';
-import { Difficulty, OptionKey, Question } from '../types/index.ts';
+import { GenerationDifficulty, OptionKey, Question, QuestionGenerationScope } from '../types/index.ts';
 import { QuestionEditorModal } from './QuestionEditorModal.tsx';
 import {
   AlertTriangle,
@@ -24,11 +24,13 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
     questions,
     generateQuestionDrafts,
     approveQuestion,
+    bulkApproveQuestions,
     rejectQuestion,
   } = useApp();
   const [subjectId, setSubjectId] = useState('english');
+  const [scope, setScope] = useState<QuestionGenerationScope>('whole_subject');
   const [topic, setTopic] = useState(SUBJECT_TOPICS.english?.[0] || '');
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [difficulty, setDifficulty] = useState<GenerationDifficulty>('mixed');
   const [count, setCount] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedIds, setGeneratedIds] = useState<string[]>([]);
@@ -50,9 +52,10 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
     setIsGenerating(true);
     const drafts = await generateQuestionDrafts({
       subjectId,
-      topic,
+      scope,
+      topic: scope === 'whole_subject' ? '' : topic,
       difficulty,
-      count: Math.min(50, Math.max(1, Number(count) || 1)),
+      count: Math.min(60, Math.max(1, Number(count) || 1)),
     });
     if (drafts.length > 0) setGeneratedIds(drafts.map(question => question.id));
     setIsGenerating(false);
@@ -70,7 +73,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
             </div>
             <div>
               <h2 className="text-xl font-extrabold">Admin Question Generator</h2>
-              <p className="text-xs text-slate-300 mt-1">Create original JAMB-style practice drafts within the selected syllabus topic.</p>
+              <p className="text-xs text-slate-300 mt-1">Generate up to 60 original JAMB-style practice drafts across the complete subject syllabus.</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10" aria-label="Close generator">
@@ -91,7 +94,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
             </div>
           </div>
 
-          <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50">
+          <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50">
             <label className="text-xs font-bold text-slate-700">
               Subject
               <select value={subjectId} onChange={event => handleSubjectChange(event.target.value)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
@@ -99,27 +102,45 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               </select>
             </label>
             <label className="text-xs font-bold text-slate-700">
-              Topic / syllabus
-              <select value={topic} onChange={event => setTopic(event.target.value)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
-                {availableTopics.map(item => <option key={item} value={item}>{item}</option>)}
+              Coverage
+              <select value={scope} onChange={event => setScope(event.target.value as QuestionGenerationScope)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
+                <option value="whole_subject">Whole subject syllabus</option>
+                <option value="topic">Single syllabus topic</option>
               </select>
             </label>
+            {scope === 'topic' ? (
+              <label className="text-xs font-bold text-slate-700">
+                Topic
+                <select value={topic} onChange={event => setTopic(event.target.value)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
+                  {availableTopics.map(item => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+            ) : (
+              <div className="text-xs font-bold text-slate-700">
+                Syllabus coverage
+                <div className="mt-1.5 min-h-[42px] flex items-center px-3 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-800 font-semibold">
+                  All {availableTopics.length} catalog topics
+                </div>
+              </div>
+            )}
             <label className="text-xs font-bold text-slate-700">
               Difficulty
-              <select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
+              <select value={difficulty} onChange={event => setDifficulty(event.target.value as GenerationDifficulty)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
+                <option value="mixed">Balanced JAMB mix</option>
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
               </select>
             </label>
             <label className="text-xs font-bold text-slate-700">
-              Number of questions (1–50)
-              <input type="number" min={1} max={50} value={count} onChange={event => setCount(Math.min(50, Math.max(1, Number(event.target.value) || 1)))} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm" />
+              Number of questions (1–60)
+              <input type="number" min={1} max={60} value={count} onChange={event => setCount(Math.min(60, Math.max(1, Number(event.target.value) || 1)))} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm" />
             </label>
-            <div className="md:col-span-4 flex justify-end">
-              <button type="submit" disabled={isGenerating || !topic} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 text-white text-xs font-bold shadow-md">
+            <div className="md:col-span-5 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] text-slate-500">The batch is distributed across the selected subject topics and queued for review.</p>
+              <button type="submit" disabled={isGenerating || (scope === 'topic' && !topic)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 text-white text-xs font-bold shadow-md">
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {isGenerating ? 'Generating drafts…' : 'Generate practice drafts'}
+                {isGenerating ? 'Generating drafts…' : 'Generate AI question batch'}
               </button>
             </div>
           </form>
@@ -131,7 +152,17 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
                   <h3 className="text-lg font-extrabold text-slate-900">Review generated drafts</h3>
                   <p className="text-xs text-slate-500">Approve saves an item to Neon; reject keeps it out of the live question bank.</p>
                 </div>
-                <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-bold">{generatedQuestions.length} drafts</span>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-bold">{generatedQuestions.length} drafts</span>
+                  <button
+                    type="button"
+                    onClick={() => bulkApproveQuestions(generatedQuestions.filter(question => question.status === 'pending').map(question => question.id))}
+                    disabled={!generatedQuestions.some(question => question.status === 'pending')}
+                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold"
+                  >
+                    Approve all pending
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -175,8 +206,8 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
           {generatedQuestions.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-slate-500">
               <FileQuestion className="w-9 h-9 mx-auto mb-2 text-slate-300" />
-              <p className="text-sm font-semibold">Choose a syllabus topic and generate a review batch.</p>
-              <p className="text-xs mt-1">No generated item is published automatically.</p>
+              <p className="text-sm font-semibold">Choose a subject and generate a full-syllabus review batch.</p>
+              <p className="text-xs mt-1">AI items remain pending until you approve them for CBT practice.</p>
             </div>
           )}
         </div>

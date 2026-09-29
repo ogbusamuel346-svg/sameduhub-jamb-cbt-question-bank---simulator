@@ -88,6 +88,8 @@ class HttpError extends Error {
 
 const QUESTION_STATUSES = ['draft', 'pending', 'approved', 'rejected'] as const;
 const QUESTION_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+const QUESTION_GENERATION_DIFFICULTIES = [...QUESTION_DIFFICULTIES, 'mixed'] as const;
+const QUESTION_GENERATION_SCOPES = ['topic', 'whole_subject'] as const;
 const QUESTION_OPTION_KEYS = ['A', 'B', 'C', 'D'] as const;
 
 // Initialize database tables if not already present
@@ -587,12 +589,28 @@ function parseGeneratedQuestionResponse(rawText: string) {
   return Array.isArray(parsed) ? parsed : parsed?.questions;
 }
 
+function normalizeSyllabusLabel(value: string) {
+  return value.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function buildTopicPlan(topics: string[], count: number) {
+  return Array.from({ length: count }, (_, index) => topics[index % topics.length]);
+}
+
+function balancedDifficultyAt(index: number, count: number) {
+  const position = index / Math.max(1, count);
+  if (position < 0.25) return 'easy';
+  if (position < 0.75) return 'medium';
+  return 'hard';
+}
+
 async function generateQuestionDrafts(
   subjectId: string,
   topic: string,
   difficulty: string,
   count: number,
   createdBy: string,
+  scope: typeof QUESTION_GENERATION_SCOPES[number] = 'topic',
 ) {
   if (!process.env.GEMINI_API_KEY) {
     throw new HttpError(503, 'Question generation is not configured. Add GEMINI_API_KEY to the server environment.');
@@ -603,32 +621,46 @@ async function generateQuestionDrafts(
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const syllabusTopics = SUBJECT_TOPICS[subjectId] || [];
+  if (syllabusTopics.length === 0) throw new HttpError(400, 'This subject has no syllabus topics configured yet.');
+
+  const wholeSubject = scope === 'whole_subject';
+  const topicPlan = buildTopicPlan(wholeSubject ? syllabusTopics : [topic], count);
+  const coveragePlan = topicPlan.map((plannedTopic, index) => `${index + 1}. ${plannedTopic}`).join('\n');
+  const difficultyInstructions = difficulty === 'mixed'
+    ? 'Use a balanced JAMB-style mix: approximately 25% easy, 50% medium, and 25% hard. Include the actual difficulty for every item.'
+    : `Every item must have difficulty "${difficulty}".`;
   const prompt = `
 You are a careful Nigerian UTME/JAMB practice-question writer.
 
 Create exactly ${count} original multiple-choice practice questions for:
 - Subject: ${subject.name}
-- Topic: ${topic}
-- Difficulty: ${difficulty}
+- Coverage: ${wholeSubject ? 'the entire subject syllabus' : `the single topic "${topic}"`}
+- Requested difficulty: ${difficulty}
 - Subject scope: ${subject.description}
 - Available syllabus topic labels in this app: ${syllabusTopics.join('; ')}
 
 Use the JAMB Integrated Brochure and Syllabus System (IBASS) as the syllabus reference: ${JAMB_SYLLABUS_SOURCE_URL}
-Stay within the selected subject and topic. Do not invent a topic outside that scope.
+Stay within the selected subject and the supplied syllabus topic labels. Do not invent a topic outside that scope.
 These are original practice questions, NOT official JAMB questions. Do not claim that JAMB authored, endorsed, or previously used them, and do not reproduce past questions verbatim.
+Write realistic CBT items appropriate for the Nigerian senior-secondary curriculum. Use calculations, interpretation, application, and recall where appropriate for the subject. For Use of English, use a passage only when the question genuinely tests comprehension or summary. Keep passages and explanations concise.
+${difficultyInstructions}
+
+Coverage plan (return the questions in this exact order and set each item's topic to the matching label):
+${coveragePlan}
 
 Return only valid JSON: an array of exactly ${count} objects. Each object must have:
-questionText (string), passage (string or empty string), options (object with exactly A, B, C, D string values), correctAnswer (exactly one of A/B/C/D), and explanation (string).
-Each question must have four distinct options, exactly one defensible correct answer, and an explanation that teaches the reasoning. Avoid duplicate stems and avoid ambiguous wording.
+topic (exactly one supplied syllabus label), difficulty (exactly one of easy, medium, hard), questionText (string), passage (string or empty string), options (object with exactly A, B, C, D string values), correctAnswer (exactly one of A/B/C/D), and explanation (string).
+Each question must have four distinct options, exactly one defensible correct answer, and an explanation that teaches the reasoning. Avoid duplicate stems, repeated numerical values, answer-pattern bias, and ambiguous wording.
 `.trim();
 
   const response = await ai.models.generateContent({
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     contents: prompt,
     config: {
-      temperature: 0.65,
-      maxOutputTokens: Math.min(32768, 1400 + count * 520),
+        temperature: 0.55,
+        maxOutputTokens: Math.min(65536, 1800 + count * 560),
       responseMimeType: 'application/json',
+        tools: [{ googleSearch: {} }],
     },
   });
 
@@ -645,34 +677,43 @@ Each question must have four distinct options, exactly one defensible correct an
     throw new HttpError(502, 'The question model did not return a question array.');
   }
 
+  const seenStems = new Set<string>();
   const drafts = rawQuestions
     .map((item, index) => {
       const options = item?.options || {};
       const normalizedOptions = Array.isArray(options)
         ? { A: options[0], B: options[1], C: options[2], D: options[3] }
         : options;
+      const questionText = typeof item?.questionText === 'string' ? item.questionText.trim() : '';
       const correctAnswer = typeof item?.correctAnswer === 'string'
         ? item.correctAnswer.trim().toUpperCase()
         : '';
       const optionValues = QUESTION_OPTION_KEYS.map(key => String(normalizedOptions[key] || '').trim());
-      const valid = typeof item?.questionText === 'string'
-        && item.questionText.trim()
+      const stemKey = normalizeSyllabusLabel(questionText);
+      const validDifficulty = difficulty === 'mixed'
+        ? QUESTION_DIFFICULTIES.includes(item?.difficulty)
+          ? item.difficulty
+          : balancedDifficultyAt(index, count)
+        : difficulty;
+      const valid = questionText
         && optionValues.every(Boolean)
         && new Set(optionValues.map(value => value.toLowerCase())).size === 4
         && QUESTION_OPTION_KEYS.includes(correctAnswer)
         && typeof item?.explanation === 'string'
-        && item.explanation.trim();
+        && item.explanation.trim()
+        && !seenStems.has(stemKey);
 
       if (!valid) return null;
+      seenStems.add(stemKey);
 
       const now = new Date().toISOString();
       return {
         id: `ai-draft-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
         subjectId,
-        topic,
-        difficulty,
+        topic: topicPlan[index] || topic,
+        difficulty: validDifficulty,
         passage: typeof item.passage === 'string' && item.passage.trim() ? item.passage.trim() : undefined,
-        questionText: item.questionText.trim(),
+        questionText,
         options: {
           A: optionValues[0],
           B: optionValues[1],
@@ -692,7 +733,7 @@ Each question must have four distinct options, exactly one defensible correct an
     .filter(Boolean);
 
   if (drafts.length < count) {
-    throw new HttpError(502, `The model returned ${drafts.length} valid questions instead of ${count}. Please try again.`);
+    throw new HttpError(502, `The model returned ${drafts.length} valid questions instead of ${count}. Try generating this batch again.`);
   }
 
   return drafts.slice(0, count);
@@ -1140,24 +1181,35 @@ export async function createApiApp() {
       const subjectId = typeof req.body?.subjectId === 'string' ? req.body.subjectId.trim() : '';
       const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';
       const difficulty = typeof req.body?.difficulty === 'string' ? req.body.difficulty.trim() : '';
+      const scope = typeof req.body?.scope === 'string' ? req.body.scope.trim() : 'topic';
       const count = Number(req.body?.count);
       const subject = JAMB_SUBJECTS.find(item => item.id === subjectId);
 
-      if (!subject || !SUBJECT_TOPICS[subjectId]?.includes(topic)) {
-        throw new HttpError(400, 'Select a subject and topic from the JAMB syllabus catalog.');
+      if (!subject || !QUESTION_GENERATION_SCOPES.includes(scope as typeof QUESTION_GENERATION_SCOPES[number])) {
+        throw new HttpError(400, 'Select a valid JAMB subject and question scope.');
       }
-      if (!QUESTION_DIFFICULTIES.includes(difficulty as typeof QUESTION_DIFFICULTIES[number])) {
-        throw new HttpError(400, 'Select easy, medium, or hard difficulty.');
+      if (scope === 'topic' && !SUBJECT_TOPICS[subjectId]?.includes(topic)) {
+        throw new HttpError(400, 'Select a topic from the JAMB syllabus catalog.');
       }
-      if (!Number.isInteger(count) || count < 1 || count > 50) {
-        throw new HttpError(400, 'Question count must be a whole number from 1 to 50.');
+      if (!QUESTION_GENERATION_DIFFICULTIES.includes(difficulty as typeof QUESTION_GENERATION_DIFFICULTIES[number])) {
+        throw new HttpError(400, 'Select easy, medium, hard, or balanced difficulty.');
+      }
+      if (!Number.isInteger(count) || count < 1 || count > 60) {
+        throw new HttpError(400, 'Question count must be a whole number from 1 to 60.');
       }
 
-      const questions = await generateQuestionDrafts(subjectId, topic, difficulty, count, admin.name);
+      const questions = await generateQuestionDrafts(
+        subjectId,
+        topic,
+        difficulty,
+        count,
+        admin.name,
+        scope as typeof QUESTION_GENERATION_SCOPES[number],
+      );
       return res.json({
         success: true,
         questions,
-        message: 'AI drafts generated for admin review. Nothing has been saved to Neon yet.',
+        message: `Generated ${questions.length} AI practice drafts across ${scope === 'whole_subject' ? 'the full subject syllabus' : 'the selected topic'}. Nothing has been saved to Neon yet.`,
       });
     } catch (error: any) {
       return respondWithError(res, error, 'Unable to generate question drafts.');
