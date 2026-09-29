@@ -117,6 +117,16 @@ async function initNeonDatabase() {
       CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
 
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        token_hash CHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        used_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expiry ON password_reset_tokens(expires_at);
+
       CREATE TABLE IF NOT EXISTS questions (
         id VARCHAR(64) PRIMARY KEY,
         subject_id VARCHAR(64) NOT NULL,
@@ -284,6 +294,50 @@ async function deleteSession(req: Request) {
   const token = getSessionToken(req);
   if (token) {
     await pool.query('DELETE FROM auth_sessions WHERE token_hash = $1', [hashSessionToken(token)]);
+  }
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>'"]/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[character] || character);
+}
+
+async function sendPasswordResetEmail(to: string, name: string, resetUrl: string) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.AUTH_EMAIL_FROM?.trim();
+  if (!apiKey || !from) {
+    throw new HttpError(503, 'Password reset email service is unavailable. Configure RESEND_API_KEY and AUTH_EMAIL_FROM.');
+  }
+
+  const safeName = escapeHtml(name || 'Candidate');
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: 'Reset your SamEduHub password',
+      html: `<p>Hello ${safeName},</p>
+        <p>We received a request to reset your SamEduHub password.</p>
+        <p><a href="${resetUrl}">Reset your password</a></p>
+        <p>This link expires in one hour and can only be used once. If you did not request this, you can ignore this email.</p>`,
+      text: `Hello ${name || 'Candidate'},\n\nReset your SamEduHub password here: ${resetUrl}\n\nThis link expires in one hour and can only be used once.`,
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => '');
+    console.error('[App Auth Email Error]', response.status, details);
+    throw new HttpError(502, 'Unable to send the password reset email.');
   }
 }
 
@@ -734,13 +788,99 @@ export async function createApiApp() {
     return res.json({ success: true, message: 'Signed out successfully.' });
   });
 
-  app.post('/api/auth/password-reset/request', async (_req: Request, res: Response) => {
-    // Password-reset email delivery is deliberately not faked. Add an email
-    // provider before exposing reset links to users in production.
-    return res.status(501).json({
-      success: false,
-      error: 'Password reset email delivery is not configured yet.',
-    });
+  app.post('/api/auth/password-reset/request', async (req: Request, res: Response) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email address is required.' });
+    }
+
+    try {
+      const result = await pool.query(
+        'SELECT id, name, email FROM users WHERE lower(email) = $1 LIMIT 1',
+        [email],
+      );
+      const user = result.rows[0];
+
+      // Keep the response generic so the endpoint does not reveal whether an
+      // email address belongs to an account.
+      if (!user) {
+        return res.json({
+          success: true,
+          message: 'If an account exists for that email, a reset link has been sent.',
+        });
+      }
+
+      const rawToken = randomBytes(32).toString('base64url');
+      const tokenHash = hashSessionToken(rawToken);
+      await pool.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [user.id]);
+      await pool.query(
+        `INSERT INTO password_reset_tokens (token_hash, user_id, expires_at)
+         VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+        [tokenHash, user.id],
+      );
+
+      const configuredAppUrl = process.env.APP_URL?.trim().replace(/\/$/, '');
+      const appUrl = configuredAppUrl || `${req.protocol}://${req.get('host')}`;
+      const resetUrl = `${appUrl}/?resetToken=${encodeURIComponent(rawToken)}`;
+
+      try {
+        await sendPasswordResetEmail(user.email, user.name, resetUrl);
+      } catch (emailError) {
+        await pool.query('DELETE FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
+        throw emailError;
+      }
+
+      return res.json({
+        success: true,
+        message: 'If an account exists for that email, a reset link has been sent.',
+      });
+    } catch (error: any) {
+      if (error instanceof HttpError) {
+        return res.status(error.statusCode).json({ success: false, error: error.message });
+      }
+      console.error('[App Password Reset Request Error]', error?.message || error);
+      return res.status(500).json({ success: false, error: 'Unable to request a password reset.' });
+    }
+  });
+
+  app.post('/api/auth/password-reset/confirm', async (req: Request, res: Response) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+
+    if (!token || newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, error: 'A valid reset token and an 8–128 character password are required.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `SELECT user_id
+         FROM password_reset_tokens
+         WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+         FOR UPDATE`,
+        [hashSessionToken(token)],
+      );
+      const resetToken = result.rows[0];
+      if (!resetToken) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'This password reset link is invalid or has expired.' });
+      }
+
+      const passwordHash = await hashPassword(newPassword);
+      await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, resetToken.user_id]);
+      await client.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = $1', [hashSessionToken(token)]);
+      await client.query('DELETE FROM auth_sessions WHERE user_id = $1', [resetToken.user_id]);
+      await client.query('COMMIT');
+      clearSessionCookie(res);
+      return res.json({ success: true, message: 'Password updated. You can now sign in.' });
+    } catch (error: any) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      console.error('[App Password Reset Confirm Error]', error?.message || error);
+      return res.status(500).json({ success: false, error: 'Unable to update your password.' });
+    } finally {
+      client.release();
+    }
   });
 
   // ----------------------------------------------------

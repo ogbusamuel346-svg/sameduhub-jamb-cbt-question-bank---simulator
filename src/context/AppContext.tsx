@@ -76,7 +76,7 @@ interface AppContextType {
   // Application-owned authentication state
   isAuthenticated: boolean;
   isAuthModalOpen: boolean;
-  authModalMode: 'login' | 'signup';
+  authModalMode: 'login' | 'signup' | 'reset';
   authModalReason: 'general' | 'cbt_required';
   pendingExamConfig: CbtExamConfig | null;
   setPendingExamConfig: (cfg: CbtExamConfig | null) => void;
@@ -92,6 +92,7 @@ interface AppContextType {
     selectedSubjects?: string[];
   }) => Promise<boolean>;
   requestPasswordReset: (email: string) => Promise<boolean>;
+  resetPassword: (token: string, newPassword: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
@@ -101,7 +102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUserState] = useState<User>(GUEST_USER);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('signup');
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup' | 'reset'>('signup');
   const [authModalReason, setAuthModalReason] = useState<'general' | 'cbt_required'>('general');
   const [pendingExamConfig, setPendingExamConfig] = useState<CbtExamConfig | null>(null);
   const [questions, setQuestions] = useState<Question[]>(() => StorageService.getQuestions());
@@ -160,6 +161,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // holds an HttpOnly session cookie; it never stores a password or token.
   useEffect(() => {
     let cancelled = false;
+
+    if (new URLSearchParams(window.location.search).has('resetToken')) {
+      setAuthModalMode('reset');
+      setIsAuthModalOpen(true);
+    }
 
     const restoreSession = async () => {
       try {
@@ -323,6 +329,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsAuthModalOpen(false);
     showToast(result.message || 'Password reset requested.', 'success');
+    return true;
+  };
+
+  const resetPassword = async (token: string, newPassword: string): Promise<boolean> => {
+    if (newPassword.length < 8) {
+      showToast('Password must be at least 8 characters.', 'error');
+      return false;
+    }
+
+    const result = await AuthService.confirmPasswordReset(token, newPassword);
+    if (!result.success) {
+      showToast(result.error || 'Unable to update your password.', 'error');
+      return false;
+    }
+
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setIsAuthModalOpen(false);
+    showToast(result.message || 'Password updated. You can now sign in.', 'success');
     return true;
   };
 
@@ -721,6 +745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginWithAuth,
         signupWithAuth,
         requestPasswordReset,
+        resetPassword,
         logout,
       }}
     >

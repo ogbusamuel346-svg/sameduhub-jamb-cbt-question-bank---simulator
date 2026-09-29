@@ -27,16 +27,17 @@ creates a random opaque session token; only its SHA-256 hash is stored in
 `auth_sessions`, while the browser receives an `HttpOnly`, `SameSite=Lax`
 cookie. Neon Managed Auth is not enabled or used.
 
-On startup, the server creates or migrates the `users` and `auth_sessions`
-tables. Existing Neon Auth users do not have transferable passwords or session
-cookies, so they must create a new application account after this cutover.
-Existing profile/question/test data is not deleted.
+On startup, the server creates or migrates the `users`, `auth_sessions`, and
+`password_reset_tokens` tables. Existing Neon Auth users do not have
+transferable passwords or session cookies, so they can use the reset flow to
+set an app password after this cutover. Existing profile/question/test data is
+not deleted.
 
 Set `AUTH_ADMIN_EMAILS` to a comma-separated list of trusted email addresses
 before signup when those accounts should receive the admin role. Keep this
-variable server-side. Password-reset email delivery is intentionally disabled
-until an email provider is configured; the UI reports that state instead of
-pretending to send a reset link.
+variable server-side. Password-reset emails use the Resend HTTP API. Configure
+`RESEND_API_KEY`, `AUTH_EMAIL_FROM`, and `APP_URL`; the sender domain must be
+verified in Resend. The reset token is one-time and expires after one hour.
 
 Do not put a database password in browser code or commit it to `.env.example`.
 
@@ -52,8 +53,9 @@ JAMB questions, and remain out of Neon until an authenticated admin reviews,
 edits, and approves them. Approved questions are stored in the Neon `questions`
 table and organized by subject, topic, and difficulty.
 
-For Vercel, configure `DATABASE_URL`, `AUTH_ADMIN_EMAILS`, and
-`GEMINI_API_KEY` in the project environment settings. The repository includes
+For Vercel, configure `DATABASE_URL`, `AUTH_ADMIN_EMAILS`, `RESEND_API_KEY`,
+`AUTH_EMAIL_FROM`, `APP_URL`, and `GEMINI_API_KEY` in the project environment
+settings. The repository includes
 a catch-all API function under `api/[...path].ts` for the protected routes.
 
 Note: this repository is currently a Vite React SPA with an Express API. The

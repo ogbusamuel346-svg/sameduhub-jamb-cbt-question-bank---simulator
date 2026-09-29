@@ -84,5 +84,16 @@ export const AuthService = {
       return { success: false, error: error?.message || 'Password reset is unavailable.' };
     }
   },
+
+  async confirmPasswordReset(token: string, newPassword: string): Promise<AuthApiResponse> {
+    try {
+      return await request<AuthApiResponse>('/api/auth/password-reset/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      });
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Unable to update your password.' };
+    }
+  },
 };
 

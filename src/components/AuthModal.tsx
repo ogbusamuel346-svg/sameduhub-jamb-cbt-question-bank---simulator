@@ -25,16 +25,24 @@ export const AuthModal: React.FC = () => {
     closeAuthModal,
     loginWithAuth,
     signupWithAuth,
-    requestPasswordReset
+    requestPasswordReset,
+    resetPassword
   } = useApp();
 
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(authModalMode);
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot' | 'reset'>(authModalMode);
   const [emailOrReg, setEmailOrReg] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [resetToken, setResetToken] = useState<string | null>(() => (
+    typeof window === 'undefined'
+      ? null
+      : new URLSearchParams(window.location.search).get('resetToken')
+  ));
   const [jambReg, setJambReg] = useState('');
   const [targetScore, setTargetScore] = useState(320);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([
@@ -96,6 +104,17 @@ export const AuthModal: React.FC = () => {
     setIsSubmitting(false);
   };
 
+  const handlePasswordResetConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetToken || !newPassword || newPassword !== confirmNewPassword) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    await resetPassword(resetToken, newPassword);
+    setIsSubmitting(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div
@@ -131,7 +150,7 @@ export const AuthModal: React.FC = () => {
           </div>
 
           {/* Tab Switcher: Login vs Sign Up */}
-          <div className="flex rounded-xl bg-slate-900/60 p-1 border border-blue-700/40 mt-3">
+          {mode !== 'reset' && <div className="flex rounded-xl bg-slate-900/60 p-1 border border-blue-700/40 mt-3">
             <button
               type="button"
               onClick={() => setMode('login')}
@@ -154,7 +173,7 @@ export const AuthModal: React.FC = () => {
             >
               Create Account
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* Modal Scrollable Body */}
@@ -185,12 +204,66 @@ export const AuthModal: React.FC = () => {
             </div>
           )}
 
-          {mode === 'forgot' ? (
+          {mode === 'reset' ? (
+            <form onSubmit={handlePasswordResetConfirm} className="space-y-4">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">Choose a new password</h2>
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                  Use a password with at least 8 characters. This link can only be used once.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  New Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={confirmNewPassword}
+                    onChange={e => setConfirmNewPassword(e.target.value)}
+                    placeholder="Repeat your new password"
+                    className="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
+                  />
+                </div>
+                {confirmNewPassword && newPassword !== confirmNewPassword && (
+                  <p className="text-xs text-red-600 mt-1.5">Passwords do not match.</p>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting || !newPassword || newPassword !== confirmNewPassword}
+                className="w-full py-3.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm shadow-md shadow-blue-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Lock className="w-4 h-4" />
+                <span>{isSubmitting ? 'Updating password...' : 'Update password'}</span>
+              </button>
+            </form>
+          ) : mode === 'forgot' ? (
             <form onSubmit={handlePasswordResetSubmit} className="space-y-4">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">Reset your password</h2>
                 <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                  Password reset email delivery has not been configured yet. Contact the administrator if you need access restored.
+                  Enter your email and we’ll send a secure one-time reset link.
                 </p>
               </div>
               <div>
