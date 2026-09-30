@@ -15,7 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/5c3a7481-a91d-45df-bf0a-66959
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Set the `OPENROUTER_API_KEY` in [.env.local](.env.local) to your OpenRouter API key
 3. Run the app:
    `npm run dev`
 
@@ -45,8 +45,8 @@ Do not put a database password in browser code or commit it to `.env.example`.
 Admins can open **Question Bank → AI Generator** to choose a JAMB subject,
 the full subject syllabus or one syllabus topic, a fixed or balanced difficulty,
 and 1–60 questions. Whole-subject generation distributes the batch across all
-configured syllabus topics. Generation uses the server-side `GEMINI_API_KEY`,
-Google Search grounding, and the JAMB IBASS syllabus reference at
+configured syllabus topics. Generation uses the server-side `OPENROUTER_API_KEY`
+and the JAMB IBASS syllabus reference at
 https://ibass.jamb.gov.ng/.
 
 Generated items are clearly labeled as AI practice questions, are not official
@@ -55,7 +55,7 @@ validation. Admins can still edit or remove them from the question bank. They
 are organized by subject, topic, and difficulty.
 
 For Vercel, configure `DATABASE_URL`, `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_PUBLISHABLE_KEY`, `AUTH_ADMIN_EMAILS`, and `GEMINI_API_KEY` in
+`VITE_SUPABASE_PUBLISHABLE_KEY`, `AUTH_ADMIN_EMAILS`, and `OPENROUTER_API_KEY` in
 the project environment settings. The repository includes
 a catch-all API function under `api/[...path].ts` for the protected routes.
 

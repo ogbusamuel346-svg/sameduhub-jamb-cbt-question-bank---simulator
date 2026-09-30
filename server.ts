@@ -10,11 +10,10 @@ import {
   scrypt as scryptCallback,
   timingSafeEqual,
 } from 'crypto';
-import { GoogleGenAI } from '@google/genai';
 import { JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from './src/data/subjects.ts';
 
 // Load local secrets for the server as well as Vite. `.env.local` is the
-// documented place for GEMINI_API_KEY during local development, while `.env`
+// documented place for OPENROUTER_API_KEY during local development, while `.env`
 // remains the fallback for shared configuration and deployment tooling.
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -671,14 +670,14 @@ async function generateQuestions(
   createdBy: string,
   scope: typeof QUESTION_GENERATION_SCOPES[number] = 'topic',
 ) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new HttpError(503, 'Question generation is not configured. Add GEMINI_API_KEY to the server environment.');
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!openRouterApiKey) {
+    throw new HttpError(503, 'Question generation is not configured. Add OPENROUTER_API_KEY to the server environment.');
   }
 
   const subject = JAMB_SUBJECTS.find(item => item.id === subjectId);
   if (!subject) throw new HttpError(400, 'Select a valid JAMB subject.');
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const syllabusTopics = SUBJECT_TOPICS[subjectId] || [];
   if (syllabusTopics.length === 0) throw new HttpError(400, 'This subject has no syllabus topics configured yet.');
 
@@ -707,28 +706,48 @@ ${difficultyInstructions}
 Coverage plan (return the questions in this exact order and set each item's topic to the matching label):
 ${coveragePlan}
 
-Return only valid JSON: an array of exactly ${count} objects. Each object must have:
+Return only valid JSON as an object with a "questions" array containing exactly ${count} objects. Each object must have:
 topic (exactly one supplied syllabus label), difficulty (exactly one of easy, medium, hard), questionText (string), passage (string or empty string), options (object with exactly A, B, C, D string values), correctAnswer (exactly one of A/B/C/D), and explanation (string).
 Each question must have four distinct options, exactly one defensible correct answer, and an explanation that teaches the reasoning. Avoid duplicate stems, repeated numerical values, answer-pattern bias, and ambiguous wording.
 `.trim();
 
-  const configuredModel = (process.env.GEMINI_MODEL || '').trim();
-  const model = configuredModel === 'gemini-2.5-flash' || configuredModel === 'models/gemini-2.5-flash'
-    ? 'gemini-3.8-flash'
-    : configuredModel || 'gemini-3.8-flash';
-
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-        temperature: 0.55,
-        maxOutputTokens: Math.min(65536, 1800 + count * 560),
-      responseMimeType: 'application/json',
-        tools: [{ googleSearch: {} }],
+  const model = (process.env.OPENROUTER_MODEL || '~openai/gpt-latest').trim();
+  const baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+  const siteUrl = process.env.OPENROUTER_SITE_URL?.trim() || process.env.APP_URL?.trim();
+  const siteName = process.env.OPENROUTER_SITE_NAME?.trim() || 'SamEduHub';
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${openRouterApiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-OpenRouter-Title': siteName,
+      ...(siteUrl ? { 'HTTP-Referer': siteUrl } : {}),
     },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.55,
+      max_tokens: Math.min(65536, 1800 + count * 560),
+      response_format: { type: 'json_object' },
+    }),
   });
 
-  const rawText = response.text?.trim();
+  const responseBody: any = await response.json().catch(() => null);
+  if (!response.ok) {
+    const providerMessage = responseBody?.error?.message || responseBody?.message || `Request failed with status ${response.status}.`;
+    if (response.status === 429) {
+      throw new HttpError(429, `OpenRouter quota or rate limit reached. Check your OpenRouter plan and usage limits. ${providerMessage}`);
+    }
+    throw new HttpError(502, `OpenRouter request failed. ${providerMessage}`);
+  }
+
+  const content = responseBody?.choices?.[0]?.message?.content;
+  const rawText = (typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.map((part: any) => typeof part === 'string' ? part : part?.text || '').join('')
+      : '').trim();
   if (!rawText) throw new HttpError(502, 'The question model returned an empty response.');
 
   let rawQuestions: any[];
