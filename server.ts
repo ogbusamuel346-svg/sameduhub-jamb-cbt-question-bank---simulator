@@ -712,8 +712,13 @@ topic (exactly one supplied syllabus label), difficulty (exactly one of easy, me
 Each question must have four distinct options, exactly one defensible correct answer, and an explanation that teaches the reasoning. Avoid duplicate stems, repeated numerical values, answer-pattern bias, and ambiguous wording.
 `.trim();
 
+  const configuredModel = (process.env.GEMINI_MODEL || '').trim();
+  const model = configuredModel === 'gemini-2.5-flash' || configuredModel === 'models/gemini-2.5-flash'
+    ? 'gemini-3.8-flash'
+    : configuredModel || 'gemini-3.8-flash';
+
   const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    model,
     contents: prompt,
     config: {
         temperature: 0.55,
