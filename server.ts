@@ -13,6 +13,10 @@ import {
 import { GoogleGenAI } from '@google/genai';
 import { JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from './src/data/subjects.ts';
 
+// Load local secrets for the server as well as Vite. `.env.local` is the
+// documented place for GEMINI_API_KEY during local development, while `.env`
+// remains the fallback for shared configuration and deployment tooling.
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -568,12 +572,16 @@ async function requireAdmin(req: Request) {
   };
 }
 
-function respondWithError(res: Response, error: any, fallback: string) {
+function respondWithError(res: Response, error: any, fallback: string, exposeUnexpectedError = false) {
   if (error instanceof HttpError) {
     return res.status(error.statusCode).json({ success: false, error: error.message });
   }
   console.error(`[Neon API Error] ${fallback}`, error?.message || error);
-  return res.status(500).json({ success: false, error: fallback });
+  const detail = typeof error?.message === 'string' ? error.message.trim() : '';
+  return res.status(500).json({
+    success: false,
+    error: exposeUnexpectedError && detail ? `${fallback} ${detail}` : fallback,
+  });
 }
 
 function normalizeQuestionPayload(body: any) {
@@ -1335,7 +1343,7 @@ export async function createApiApp() {
         message: `Generated and published ${publishedQuestions.length} practice questions across ${scope === 'whole_subject' ? 'the full subject syllabus' : 'the selected topic'}.`,
       });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to generate questions.');
+      return respondWithError(res, error, 'Unable to generate questions.', true);
     }
   });
 

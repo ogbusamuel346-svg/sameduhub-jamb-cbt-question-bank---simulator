@@ -9,7 +9,7 @@ import {
   GenerationDifficulty,
   QuestionGenerationScope,
 } from '../types/index.ts';
-import { JAMB_SUBJECTS } from '../data/subjects.ts';
+import { JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS } from '../data/subjects.ts';
 import {
   StorageService,
   DEFAULT_NEON_CONFIG,
@@ -239,17 +239,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const executeCbtTest = (config: CbtExamConfig, candidateUser: User) => {
-    const { mode, subjects, questionsPerSubject = 10, customTimeMinutes, topicFilter } = config;
+    const { mode, subjects, questionsPerSubject = JAMB_QUESTIONS_PER_SUBJECT, customTimeMinutes, topicFilter } = config;
     
     // Filter approved questions only for real test simulation
     const approved = questions.filter(q => q.status === 'approved');
 
     const selectedQuestionIds: string[] = [];
+    const shortages: string[] = [];
 
     subjects.forEach(subjId => {
       let subjQuestions = approved.filter(q => q.subjectId === subjId);
       if (topicFilter && topicFilter !== 'All Topics') {
         subjQuestions = subjQuestions.filter(q => q.topic === topicFilter);
+      }
+
+      if (subjQuestions.length < questionsPerSubject) {
+        const subjectName = JAMB_SUBJECTS.find(subject => subject.id === subjId)?.name || subjId;
+        shortages.push(`${subjectName} (${subjQuestions.length}/${questionsPerSubject})`);
+        return;
       }
       
       // Shuffle randomly
@@ -258,8 +265,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       picked.forEach(q => selectedQuestionIds.push(q.id));
     });
 
+    if (shortages.length > 0) {
+      showToast(
+        `This exam needs ${questionsPerSubject} approved questions per subject. Missing: ${shortages.join(', ')}. Generate and publish the remaining questions from the Admin Question Generator.`,
+        'error',
+      );
+      return;
+    }
+
     if (selectedQuestionIds.length === 0) {
-      showToast('No approved questions found for the selected subject(s). Please choose other subjects or ask Admin to approve questions.', 'error');
+      showToast('No approved questions found for the selected subject(s). Please choose other subjects or ask Admin to generate questions.', 'error');
       return;
     }
 
@@ -626,9 +641,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [];
     }
 
-    const merged = [...result.questions, ...questions];
-    setQuestions(merged);
-    StorageService.saveQuestions(merged);
+    setQuestions(previous => {
+      const remoteIds = new Set(result.questions.map(question => question.id));
+      const merged = [...result.questions, ...previous.filter(question => !remoteIds.has(question.id))];
+      StorageService.saveQuestions(merged);
+      return merged;
+    });
     showToast(`${result.questions.length} AI practice questions were generated and published.`, 'success');
     return result.questions;
   };

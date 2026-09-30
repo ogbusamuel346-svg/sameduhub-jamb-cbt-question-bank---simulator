@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { JAMB_SUBJECTS, SUBJECT_TOPICS } from '../data/subjects.ts';
+import { JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS, SUBJECT_TOPICS } from '../data/subjects.ts';
 import {
   PlayCircle,
   Clock,
@@ -30,7 +30,7 @@ export const CbtSimulatorSetup: React.FC = () => {
 
   const [singleSubject, setSingleSubject] = useState<string>('english');
   const [selectedTopic, setSelectedTopic] = useState<string>('All Topics');
-  const [questionsCount, setQuestionsCount] = useState<number>(10);
+  const [questionsCount, setQuestionsCount] = useState<number>(JAMB_QUESTIONS_PER_SUBJECT);
   const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(30);
 
   // Subject presets for Nigerian university courses
@@ -110,6 +110,24 @@ export const CbtSimulatorSetup: React.FC = () => {
   };
 
   const approvedQuestionsCount = questions.filter(q => q.status === 'approved').length;
+  const coverageSubjects = mode === 'full_jamb'
+    ? selectedSubjects
+    : mode === 'quick_mock'
+      ? ['english', 'mathematics', 'physics', 'chemistry']
+      : [singleSubject];
+  const requestedQuestionsPerSubject = mode === 'quick_mock' ? 5 : questionsCount;
+  const questionCoverage = coverageSubjects.map(subjectId => {
+    let available = questions.filter(question => question.status === 'approved' && question.subjectId === subjectId);
+    if (mode === 'subject_practice' && selectedTopic !== 'All Topics') {
+      available = available.filter(question => question.topic === selectedTopic);
+    }
+    return {
+      subjectId,
+      name: JAMB_SUBJECTS.find(subject => subject.id === subjectId)?.name || subjectId,
+      available: available.length,
+    };
+  });
+  const hasCompleteCoverage = questionCoverage.every(item => item.available >= requestedQuestionsPerSubject);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8 animate-in fade-in">
@@ -403,7 +421,7 @@ export const CbtSimulatorSetup: React.FC = () => {
               <option value="10">10 Questions (Standard Drill)</option>
               <option value="20">20 Questions (Extended Practice)</option>
               <option value="40">40 Questions (Official JAMB Quota)</option>
-              <option value="60">60 Questions (Full Subject Practice)</option>
+              <option value={JAMB_QUESTIONS_PER_SUBJECT}>{JAMB_QUESTIONS_PER_SUBJECT} Questions (Full Subject Practice)</option>
             </select>
           </div>
 
@@ -429,6 +447,11 @@ export const CbtSimulatorSetup: React.FC = () => {
           <div className="text-xs text-slate-500 flex items-center gap-1.5">
             <Info className="w-4 h-4 text-blue-600 shrink-0" />
             <span>Ready with {approvedQuestionsCount} verified questions in database.</span>
+          </div>
+
+          <div className={`w-full sm:w-auto text-[11px] rounded-xl border px-3 py-2 ${hasCompleteCoverage ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+            <strong>Coverage:</strong>{' '}
+            {questionCoverage.map(item => `${item.name} ${item.available}/${requestedQuestionsPerSubject}`).join(' · ')}
           </div>
 
           <button

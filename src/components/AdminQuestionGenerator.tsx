@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from '../data/subjects.ts';
+import { JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from '../data/subjects.ts';
 import { GenerationDifficulty, OptionKey, Question, QuestionGenerationScope } from '../types/index.ts';
 import { QuestionEditorModal } from './QuestionEditorModal.tsx';
 import {
@@ -31,29 +31,47 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
   const [generatedIds, setGeneratedIds] = useState<string[]>([]);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
 
+  const isAllSubjects = subjectId === 'all';
   const availableTopics = SUBJECT_TOPICS[subjectId] || [];
   const generatedQuestions = useMemo(
     () => generatedIds.map(id => questions.find(question => question.id === id)).filter((question): question is Question => !!question),
     [generatedIds, questions],
   );
+  const generatedPreviewQuestions = generatedQuestions.slice(0, JAMB_QUESTIONS_PER_SUBJECT);
 
   const handleSubjectChange = (nextSubjectId: string) => {
     setSubjectId(nextSubjectId);
+    if (nextSubjectId === 'all') setScope('whole_subject');
     setTopic(SUBJECT_TOPICS[nextSubjectId]?.[0] || '');
   };
 
   const handleGenerate = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsGenerating(true);
-    const generatedQuestions = await generateQuestions({
-      subjectId,
-      scope,
-      topic: scope === 'whole_subject' ? '' : topic,
-      difficulty,
-      count: Math.min(60, Math.max(1, Number(count) || 1)),
-    });
-    if (generatedQuestions.length > 0) setGeneratedIds(generatedQuestions.map(question => question.id));
-    setIsGenerating(false);
+    try {
+      const subjectsToGenerate = isAllSubjects ? JAMB_SUBJECTS : JAMB_SUBJECTS.filter(subject => subject.id === subjectId);
+      const generatedBatch: Question[] = [];
+
+      for (const subject of subjectsToGenerate) {
+        const generatedQuestions = await generateQuestions({
+          subjectId: subject.id,
+          scope: isAllSubjects ? 'whole_subject' : scope,
+          topic: !isAllSubjects && scope === 'topic' ? topic : '',
+          difficulty,
+          count: isAllSubjects ? JAMB_QUESTIONS_PER_SUBJECT : Math.min(JAMB_QUESTIONS_PER_SUBJECT, Math.max(1, Number(count) || 1)),
+        });
+        generatedBatch.push(...generatedQuestions);
+        if (generatedQuestions.length === 0) break;
+      }
+
+      if (generatedBatch.length > 0) {
+        setGeneratedIds(previous => isAllSubjects
+          ? [...generatedBatch.map(question => question.id), ...previous]
+          : generatedBatch.map(question => question.id));
+      }
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -93,12 +111,13 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
             <label className="text-xs font-bold text-slate-700">
               Subject
               <select value={subjectId} onChange={event => handleSubjectChange(event.target.value)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
+                <option value="all">All JAMB subjects (60 each)</option>
                 {JAMB_SUBJECTS.map(subject => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
               </select>
             </label>
             <label className="text-xs font-bold text-slate-700">
               Coverage
-              <select value={scope} onChange={event => setScope(event.target.value as QuestionGenerationScope)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm">
+              <select value={scope} disabled={isAllSubjects} onChange={event => setScope(event.target.value as QuestionGenerationScope)} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm disabled:bg-slate-100 disabled:text-slate-500">
                 <option value="whole_subject">Whole subject syllabus</option>
                 <option value="topic">Single syllabus topic</option>
               </select>
@@ -114,7 +133,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               <div className="text-xs font-bold text-slate-700">
                 Syllabus coverage
                 <div className="mt-1.5 min-h-[42px] flex items-center px-3 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-800 font-semibold">
-                  All {availableTopics.length} catalog topics
+                  {isAllSubjects ? `All ${JAMB_SUBJECTS.length} subject syllabi` : `All ${availableTopics.length} catalog topics`}
                 </div>
               </div>
             )}
@@ -128,14 +147,14 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               </select>
             </label>
             <label className="text-xs font-bold text-slate-700">
-              Number of questions (1–60)
-              <input type="number" min={1} max={60} value={count} onChange={event => setCount(Math.min(60, Math.max(1, Number(event.target.value) || 1)))} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm" />
+              {isAllSubjects ? 'Questions per subject' : 'Number of questions (1–60)'}
+              <input type="number" min={1} max={JAMB_QUESTIONS_PER_SUBJECT} value={isAllSubjects ? JAMB_QUESTIONS_PER_SUBJECT : count} disabled={isAllSubjects} onChange={event => setCount(Math.min(JAMB_QUESTIONS_PER_SUBJECT, Math.max(1, Number(event.target.value) || 1)))} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm disabled:bg-slate-100 disabled:text-slate-500" />
             </label>
             <div className="md:col-span-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] text-slate-500">The batch is distributed across the selected subject topics and published immediately for candidate practice.</p>
+              <p className="text-[11px] text-slate-500">{isAllSubjects ? `This publishes ${JAMB_QUESTIONS_PER_SUBJECT} questions for each of the ${JAMB_SUBJECTS.length} JAMB subjects.` : 'The batch is distributed across the selected subject topics and published immediately for candidate practice.'}</p>
               <button type="submit" disabled={isGenerating || (scope === 'topic' && !topic)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 text-white text-xs font-bold shadow-md">
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {isGenerating ? 'Generating questions…' : 'Generate question batch'}
+                {isGenerating ? (isAllSubjects ? 'Generating all subject banks…' : 'Generating questions…') : (isAllSubjects ? `Generate ${JAMB_QUESTIONS_PER_SUBJECT} per subject` : 'Generate question batch')}
               </button>
             </div>
           </form>
@@ -153,7 +172,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               </div>
 
               <div className="space-y-4">
-                {generatedQuestions.map((question, index) => (
+                {generatedPreviewQuestions.map((question, index) => (
                   <article key={question.id} className={`rounded-2xl border p-4 space-y-3 ${question.status === 'approved' ? 'border-emerald-300 bg-emerald-50/30' : question.status === 'rejected' ? 'border-red-200 bg-red-50/30' : 'border-orange-200 bg-white'}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-[11px] font-bold">
