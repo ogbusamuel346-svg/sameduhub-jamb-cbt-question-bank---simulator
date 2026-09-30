@@ -49,10 +49,10 @@ configured syllabus topics. Generation uses the server-side `GEMINI_API_KEY`,
 Google Search grounding, and the JAMB IBASS syllabus reference at
 https://ibass.jamb.gov.ng/.
 
-Generated items are clearly labeled as AI practice drafts, are not official
-JAMB questions, and remain out of Neon until an authenticated admin reviews,
-edits, and approves them. Approved questions are stored in the Neon `questions`
-table and organized by subject, topic, and difficulty.
+Generated items are clearly labeled as AI practice questions, are not official
+JAMB questions, and are published automatically for candidate practice after
+validation. Admins can still edit or remove them from the question bank. They
+are organized by subject, topic, and difficulty.
 
 For Vercel, configure `DATABASE_URL`, `VITE_SUPABASE_URL`,
 `VITE_SUPABASE_PUBLISHABLE_KEY`, `AUTH_ADMIN_EMAILS`, and `GEMINI_API_KEY` in

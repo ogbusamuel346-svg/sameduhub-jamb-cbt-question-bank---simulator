@@ -131,7 +131,7 @@ export const NeonApiService = {
     }
   },
 
-  async generateQuestionDrafts(input: QuestionGenerationRequest): Promise<QuestionsApiResponse> {
+  async generateQuestions(input: QuestionGenerationRequest): Promise<QuestionsApiResponse> {
     try {
       const res = await fetch('/api/questions/generate', {
         method: 'POST',
@@ -144,7 +144,7 @@ export const NeonApiService = {
       return {
         success: false,
         questions: [],
-        error: err.message || 'Unable to generate question drafts.',
+        error: err.message || 'Unable to generate questions.',
       };
     }
   },

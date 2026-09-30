@@ -5,13 +5,11 @@ import { GenerationDifficulty, OptionKey, Question, QuestionGenerationScope } fr
 import { QuestionEditorModal } from './QuestionEditorModal.tsx';
 import {
   AlertTriangle,
-  CheckCircle2,
   Edit3,
   FileQuestion,
   Loader2,
   Sparkles,
   X,
-  XCircle,
 } from 'lucide-react';
 
 interface AdminQuestionGeneratorProps {
@@ -22,16 +20,13 @@ interface AdminQuestionGeneratorProps {
 export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ isOpen, onClose }) => {
   const {
     questions,
-    generateQuestionDrafts,
-    approveQuestion,
-    bulkApproveQuestions,
-    rejectQuestion,
+    generateQuestions,
   } = useApp();
   const [subjectId, setSubjectId] = useState('english');
   const [scope, setScope] = useState<QuestionGenerationScope>('whole_subject');
   const [topic, setTopic] = useState(SUBJECT_TOPICS.english?.[0] || '');
   const [difficulty, setDifficulty] = useState<GenerationDifficulty>('mixed');
-  const [count, setCount] = useState(10);
+  const [count, setCount] = useState(60);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedIds, setGeneratedIds] = useState<string[]>([]);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
@@ -50,14 +45,14 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
   const handleGenerate = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsGenerating(true);
-    const drafts = await generateQuestionDrafts({
+    const generatedQuestions = await generateQuestions({
       subjectId,
       scope,
       topic: scope === 'whole_subject' ? '' : topic,
       difficulty,
       count: Math.min(60, Math.max(1, Number(count) || 1)),
     });
-    if (drafts.length > 0) setGeneratedIds(drafts.map(question => question.id));
+    if (generatedQuestions.length > 0) setGeneratedIds(generatedQuestions.map(question => question.id));
     setIsGenerating(false);
   };
 
@@ -73,7 +68,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
             </div>
             <div>
               <h2 className="text-xl font-extrabold">Admin Question Generator</h2>
-              <p className="text-xs text-slate-300 mt-1">Generate up to 60 original JAMB-style practice drafts across the complete subject syllabus.</p>
+              <p className="text-xs text-slate-300 mt-1">Generate and publish up to 60 original JAMB-style practice questions across the complete subject syllabus.</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10" aria-label="Close generator">
@@ -85,9 +80,9 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
           <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
             <div className="text-xs leading-relaxed">
-              <strong className="block text-sm mb-1">AI practice drafts — human review required</strong>
+              <strong className="block text-sm mb-1">Practice questions — automatically published</strong>
               Generated content is original practice material, not official JAMB questions and not endorsed by JAMB.
-              Review, edit, and approve each item before it is saved to the question bank or shown in candidate tests.
+              Review or edit any item after generation if you find an issue.
               <a className="block mt-1 font-semibold underline" href={JAMB_SYLLABUS_SOURCE_URL} target="_blank" rel="noreferrer">
                 JAMB IBASS syllabus reference
               </a>
@@ -137,10 +132,10 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               <input type="number" min={1} max={60} value={count} onChange={event => setCount(Math.min(60, Math.max(1, Number(event.target.value) || 1)))} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm" />
             </label>
             <div className="md:col-span-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] text-slate-500">The batch is distributed across the selected subject topics and queued for review.</p>
+              <p className="text-[11px] text-slate-500">The batch is distributed across the selected subject topics and published immediately for candidate practice.</p>
               <button type="submit" disabled={isGenerating || (scope === 'topic' && !topic)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 text-white text-xs font-bold shadow-md">
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {isGenerating ? 'Generating drafts…' : 'Generate AI question batch'}
+                {isGenerating ? 'Generating questions…' : 'Generate question batch'}
               </button>
             </div>
           </form>
@@ -149,19 +144,11 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
             <section className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">Review generated drafts</h3>
-                  <p className="text-xs text-slate-500">Approve saves an item to the question bank; reject keeps it out of live candidate tests.</p>
+                  <h3 className="text-lg font-extrabold text-slate-900">Published question batch</h3>
+                  <p className="text-xs text-slate-500">These questions are already available in candidate practice tests. You can edit them if needed.</p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-bold">{generatedQuestions.length} drafts</span>
-                  <button
-                    type="button"
-                    onClick={() => bulkApproveQuestions(generatedQuestions.filter(question => question.status === 'pending').map(question => question.id))}
-                    disabled={!generatedQuestions.some(question => question.status === 'pending')}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold"
-                  >
-                    Approve all pending
-                  </button>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">{generatedQuestions.length} published</span>
                 </div>
               </div>
 
@@ -174,7 +161,7 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
                         <span className="px-2 py-1 rounded bg-indigo-100 text-indigo-800">{JAMB_SUBJECTS.find(subject => subject.id === question.subjectId)?.name}</span>
                         <span className="px-2 py-1 rounded bg-slate-100 text-slate-700">{question.topic}</span>
                         <span className="px-2 py-1 rounded bg-amber-100 text-amber-800 capitalize">{question.difficulty}</span>
-                        <span className="px-2 py-1 rounded bg-orange-500 text-white uppercase">AI draft</span>
+                        <span className="px-2 py-1 rounded bg-emerald-500 text-white uppercase">Practice question</span>
                       </div>
                       <span className={`text-[10px] font-extrabold uppercase ${question.status === 'approved' ? 'text-emerald-700' : question.status === 'rejected' ? 'text-red-700' : 'text-orange-700'}`}>{question.status}</span>
                     </div>
@@ -190,13 +177,9 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700"><strong>Explanation:</strong> {question.explanation}</div>
 
-                    {question.status === 'pending' && (
-                      <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
-                        <button onClick={() => setEditingQuestion(question)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
-                        <button onClick={() => rejectQuestion(question.id, 'Rejected during admin review; revise the stem, options, or explanation before regenerating.')} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold border border-red-200"><XCircle className="w-3.5 h-3.5" /> Reject</button>
-                        <button onClick={() => approveQuestion(question.id)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> Approve & save</button>
-                      </div>
-                    )}
+                    <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button onClick={() => setEditingQuestion(question)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"><Edit3 className="w-3.5 h-3.5" /> Edit</button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -206,8 +189,8 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
           {generatedQuestions.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-slate-500">
               <FileQuestion className="w-9 h-9 mx-auto mb-2 text-slate-300" />
-              <p className="text-sm font-semibold">Choose a subject and generate a full-syllabus review batch.</p>
-              <p className="text-xs mt-1">AI items remain pending until you approve them for CBT practice.</p>
+              <p className="text-sm font-semibold">Choose a subject and generate a full-syllabus practice batch.</p>
+              <p className="text-xs mt-1">Generated questions are published immediately for candidate practice.</p>
             </div>
           )}
         </div>

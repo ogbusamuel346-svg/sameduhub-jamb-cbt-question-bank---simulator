@@ -133,7 +133,7 @@ export const AdminQuestionManager: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer"
           >
             <Sparkles className="w-4 h-4" />
-            <span>AI Generator</span>
+            <span>Question Generator</span>
           </button>
 
           <button
@@ -389,7 +389,7 @@ export const AdminQuestionManager: React.FC = () => {
                         </span>
                         {q.source === 'ai_generated' && (
                           <span className="px-2 py-0.5 rounded font-bold uppercase text-[10px] bg-indigo-100 text-indigo-800">
-                            AI draft · not official JAMB
+                            Practice question · not official JAMB
                           </span>
                         )}
                       </div>

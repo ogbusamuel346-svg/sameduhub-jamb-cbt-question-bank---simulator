@@ -66,7 +66,7 @@ interface AppContextType {
   bulkDeleteQuestions: (ids: string[]) => void;
   resetQuestions: () => void;
   importQuestionsJson: (jsonString: string) => boolean;
-  generateQuestionDrafts: (input: {
+  generateQuestions: (input: {
     subjectId: string;
     topic: string;
     scope?: QuestionGenerationScope;
@@ -608,7 +608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const generateQuestionDrafts = async (input: {
+  const generateQuestions = async (input: {
     subjectId: string;
     topic: string;
     scope?: QuestionGenerationScope;
@@ -616,20 +616,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     count: number;
   }): Promise<Question[]> => {
     if (!isAdminSession) {
-      showToast('Only authenticated admins can generate question drafts.', 'error');
+      showToast('Only authenticated admins can generate questions.', 'error');
       return [];
     }
 
-    const result = await NeonApiService.generateQuestionDrafts(input);
+    const result = await NeonApiService.generateQuestions(input);
     if (!result.success) {
-      showToast(result.error || 'Unable to generate question drafts.', 'error');
+      showToast(result.error || 'Unable to generate questions.', 'error');
       return [];
     }
 
     const merged = [...result.questions, ...questions];
     setQuestions(merged);
     StorageService.saveQuestions(merged);
-    showToast(`${result.questions.length} AI question drafts are ready for review.`, 'success');
+    showToast(`${result.questions.length} AI practice questions were generated and published.`, 'success');
     return result.questions;
   };
 
@@ -765,7 +765,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bulkDeleteQuestions,
         resetQuestions,
         importQuestionsJson,
-        generateQuestionDrafts,
+        generateQuestions,
         startCbtTest,
         submitCbtTest,
         exitCbtTest,

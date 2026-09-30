@@ -655,7 +655,7 @@ function balancedDifficultyAt(index: number, count: number) {
   return 'hard';
 }
 
-async function generateQuestionDrafts(
+async function generateQuestions(
   subjectId: string,
   topic: string,
   difficulty: string,
@@ -729,7 +729,7 @@ Each question must have four distinct options, exactly one defensible correct an
   }
 
   const seenStems = new Set<string>();
-  const drafts = rawQuestions
+  const generatedQuestions = rawQuestions
     .map((item, index) => {
       const options = item?.options || {};
       const normalizedOptions = Array.isArray(options)
@@ -759,7 +759,7 @@ Each question must have four distinct options, exactly one defensible correct an
 
       const now = new Date().toISOString();
       return {
-        id: `ai-draft-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `ai-generated-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
         subjectId,
         topic: topicPlan[index] || topic,
         difficulty: validDifficulty,
@@ -773,21 +773,92 @@ Each question must have four distinct options, exactly one defensible correct an
         },
         correctAnswer,
         explanation: item.explanation.trim(),
-        status: 'pending',
+        status: 'approved',
         source: 'ai_generated',
-        syllabusReference: `JAMB IBASS syllabus reference (${JAMB_SYLLABUS_SOURCE_URL}); AI draft, not an official JAMB question.`,
-        createdBy: `${createdBy} · AI draft`,
+        syllabusReference: `JAMB IBASS syllabus reference (${JAMB_SYLLABUS_SOURCE_URL}); original practice, not an official JAMB question.`,
+        createdBy: `${createdBy} · Practice question`,
+        reviewedBy: createdBy,
+        reviewNotes: 'Automatically published as original practice material; not an official JAMB question.',
         createdAt: now,
         updatedAt: now,
       };
     })
     .filter(Boolean);
 
-  if (drafts.length < count) {
-    throw new HttpError(502, `The model returned ${drafts.length} valid questions instead of ${count}. Try generating this batch again.`);
+  if (generatedQuestions.length < count) {
+    throw new HttpError(502, `The model returned ${generatedQuestions.length} valid questions instead of ${count}. Try generating this batch again.`);
   }
 
-  return drafts.slice(0, count);
+  return generatedQuestions.slice(0, count);
+}
+
+async function publishGeneratedQuestions(questions: any[]) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const published = [];
+
+    for (const question of questions) {
+      const result = await client.query(
+        `INSERT INTO questions (
+          id, subject_id, topic, difficulty, year, passage, question_text, image_url,
+          option_a, option_b, option_c, option_d, correct_answer, explanation, status,
+          created_by, reviewed_by, review_notes, source, syllabus_reference, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'approved', $15, $16, $17, 'ai_generated', $18, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          subject_id = EXCLUDED.subject_id,
+          topic = EXCLUDED.topic,
+          difficulty = EXCLUDED.difficulty,
+          passage = EXCLUDED.passage,
+          question_text = EXCLUDED.question_text,
+          option_a = EXCLUDED.option_a,
+          option_b = EXCLUDED.option_b,
+          option_c = EXCLUDED.option_c,
+          option_d = EXCLUDED.option_d,
+          correct_answer = EXCLUDED.correct_answer,
+          explanation = EXCLUDED.explanation,
+          status = 'approved',
+          created_by = EXCLUDED.created_by,
+          reviewed_by = EXCLUDED.reviewed_by,
+          review_notes = EXCLUDED.review_notes,
+          source = 'ai_generated',
+          syllabus_reference = EXCLUDED.syllabus_reference,
+          updated_at = NOW()
+        RETURNING id, subject_id, topic, difficulty, year, passage, question_text, image_url,
+          option_a, option_b, option_c, option_d, correct_answer, explanation, status,
+          created_by, reviewed_by, review_notes, source, syllabus_reference, created_at, updated_at`,
+        [
+          question.id,
+          question.subjectId,
+          question.topic,
+          question.difficulty,
+          question.year || null,
+          question.passage || null,
+          question.questionText,
+          question.imageUrl || null,
+          question.options.A,
+          question.options.B,
+          question.options.C,
+          question.options.D,
+          question.correctAnswer,
+          question.explanation,
+          question.createdBy,
+          question.reviewedBy,
+          question.reviewNotes,
+          question.syllabusReference,
+        ],
+      );
+      published.push(questionFromRow(result.rows[0]));
+    }
+
+    await client.query('COMMIT');
+    return published;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function createApiApp() {
@@ -1249,7 +1320,7 @@ export async function createApiApp() {
         throw new HttpError(400, 'Question count must be a whole number from 1 to 60.');
       }
 
-      const questions = await generateQuestionDrafts(
+      const questions = await generateQuestions(
         subjectId,
         topic,
         difficulty,
@@ -1257,13 +1328,14 @@ export async function createApiApp() {
         admin.name,
         scope as typeof QUESTION_GENERATION_SCOPES[number],
       );
+      const publishedQuestions = await publishGeneratedQuestions(questions);
       return res.json({
         success: true,
-        questions,
-        message: `Generated ${questions.length} AI practice drafts across ${scope === 'whole_subject' ? 'the full subject syllabus' : 'the selected topic'}. Nothing has been saved yet.`,
+        questions: publishedQuestions,
+        message: `Generated and published ${publishedQuestions.length} practice questions across ${scope === 'whole_subject' ? 'the full subject syllabus' : 'the selected topic'}.`,
       });
     } catch (error: any) {
-      return respondWithError(res, error, 'Unable to generate question drafts.');
+      return respondWithError(res, error, 'Unable to generate questions.');
     }
   });
 
@@ -1271,7 +1343,7 @@ export async function createApiApp() {
     try {
       const admin = await requireAdmin(req);
       const question = normalizeQuestionPayload(req.body);
-      question.createdBy = question.source === 'ai_generated' ? `${admin.name} · AI draft` : admin.name;
+      question.createdBy = question.source === 'ai_generated' ? `${admin.name} · Practice question` : admin.name;
       const result = await pool.query(
         `INSERT INTO questions (
           id, subject_id, topic, difficulty, year, passage, question_text, image_url,

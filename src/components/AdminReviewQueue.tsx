@@ -57,10 +57,10 @@ export const AdminReviewQueue: React.FC = () => {
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight">Question Review & Approval Queue</h1>
           <p className="text-xs sm:text-sm text-slate-300">
-            Vet questions for syllabus alignment, correctness of key, and explanation rigor before publishing to candidates.
+            Review pending educator submissions for syllabus alignment, correctness of key, and explanation rigor.
           </p>
           <p className="text-[11px] text-amber-300 mt-2 font-semibold">
-            AI-generated drafts are practice material only and are not official JAMB questions.
+            Generated questions are practice material only and are not official JAMB questions.
           </p>
         </div>
 
@@ -83,7 +83,7 @@ export const AdminReviewQueue: React.FC = () => {
           </div>
           <h3 className="text-lg font-bold text-slate-800">Review Queue is All Clear!</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            All submitted questions have been reviewed and approved. New educator contributions or draft questions will appear here automatically.
+            There are no pending submissions. Automatically generated practice batches are published immediately; new educator contributions will appear here for review.
           </p>
         </div>
       ) : (
@@ -121,7 +121,7 @@ export const AdminReviewQueue: React.FC = () => {
                     </span>
                     {q.source === 'ai_generated' && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
-                        AI draft · human review required
+                        Practice question · pending manual review
                       </span>
                     )}
                   </div>

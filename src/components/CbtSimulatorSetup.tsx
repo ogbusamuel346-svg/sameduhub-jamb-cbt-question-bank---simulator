@@ -403,6 +403,7 @@ export const CbtSimulatorSetup: React.FC = () => {
               <option value="10">10 Questions (Standard Drill)</option>
               <option value="20">20 Questions (Extended Practice)</option>
               <option value="40">40 Questions (Official JAMB Quota)</option>
+              <option value="60">60 Questions (Full Subject Practice)</option>
             </select>
           </div>
 
