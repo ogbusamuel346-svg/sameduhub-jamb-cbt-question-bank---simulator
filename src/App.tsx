@@ -6,20 +6,19 @@ import { CbtSimulatorSetup } from './components/CbtSimulatorSetup.tsx';
 import { CbtExamRoom } from './components/CbtExamRoom.tsx';
 import { CbtResultsModal } from './components/CbtResultsModal.tsx';
 import { AdminQuestionManager } from './components/AdminQuestionManager.tsx';
-import { AdminReviewQueue } from './components/AdminReviewQueue.tsx';
 import { CandidateHistoryView } from './components/CandidateHistoryView.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
 import { GraduationCap, ShieldCheck, Heart, AlertCircle, CheckCircle, Info } from 'lucide-react';
 
 const MainContent: React.FC = () => {
   const { activeView, toastMessage, user, isAuthenticated, openAuthModal, setActiveView } = useApp();
-  const isAdminView = activeView === 'admin_questions' || activeView === 'admin_review';
+  const isAdminView = activeView === 'admin_questions';
   const hasAdminAccess = isAuthenticated && user.role === 'admin';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const isAdminRoute = activeView === 'admin_questions' || activeView === 'admin_review';
+    const isAdminRoute = activeView === 'admin_questions';
     const currentPath = window.location.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     const desiredPath = isAdminRoute ? '/admin' : '/';
 
@@ -82,7 +81,6 @@ const MainContent: React.FC = () => {
           </div>
         )}
         {activeView === 'admin_questions' && hasAdminAccess && <AdminQuestionManager />}
-        {activeView === 'admin_review' && hasAdminAccess && <AdminReviewQueue />}
         {activeView === 'history' && <CandidateHistoryView />}
       </main>
 

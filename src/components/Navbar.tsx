@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   Menu,
   X,
-  CheckCircle2,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -23,13 +22,10 @@ export const Navbar: React.FC = () => {
     logout,
     activeView,
     setActiveView,
-    questions
   } = useApp();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-
-  const pendingQuestionsCount = questions.filter(q => q.status === 'pending').length;
 
   const handleNavClick = (view: typeof activeView) => {
     setActiveView(view);
@@ -154,27 +150,6 @@ export const Navbar: React.FC = () => {
                       </div>
                       <div className="text-xs text-slate-400 truncate">{user.email}</div>
                     </div>
-
-                    {/* Admin review queue link if admin */}
-                    {user.role === 'admin' && (
-                      <button
-                        onClick={() => {
-                          handleNavClick('admin_review');
-                          setIsProfileDropdownOpen(false);
-                        }}
-                        className="w-full flex items-center justify-between p-2 rounded-xl text-xs hover:bg-slate-700/80 text-orange-300 font-semibold mb-2 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-orange-400" />
-                          <span>Review & Approve Questions</span>
-                        </div>
-                        {pendingQuestionsCount > 0 && (
-                          <span className="px-2 py-0.5 rounded-full bg-orange-500 text-white text-[10px] font-bold">
-                            {pendingQuestionsCount}
-                          </span>
-                        )}
-                      </button>
-                    )}
 
                     <div className="border-t border-slate-700/60 pt-2 flex flex-col gap-1">
                       <button

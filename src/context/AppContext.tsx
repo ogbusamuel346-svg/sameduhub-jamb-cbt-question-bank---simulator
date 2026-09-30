@@ -24,7 +24,6 @@ export type AppView =
   | 'exam_room'
   | 'results'
   | 'admin_questions'
-  | 'admin_review'
   | 'history'
   | 'neon_settings';
 
@@ -243,16 +242,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const executeCbtTest = (config: CbtExamConfig, candidateUser: User) => {
     const { mode, subjects, questionsPerSubject = OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT, customTimeMinutes, topicFilter } = config;
     
-    // Filter approved questions only for real test simulation
-    const approved = questions.filter(q => q.status === 'approved');
+    // CBT practice uses the built-in offline bank and does not depend on an
+    // admin approval workflow or an external question-generation provider.
+    const offlineQuestions = questions.filter(q => q.id.startsWith('offline-'));
+    const practicePool = offlineQuestions.length > 0 ? offlineQuestions : questions;
 
     const selectedQuestionIds: string[] = [];
     const shortages: string[] = [];
 
     subjects.forEach(subjId => {
-      let subjQuestions = approved.filter(q => q.subjectId === subjId);
+      let subjQuestions = practicePool.filter(q => q.subjectId === subjId);
       if (topicFilter && topicFilter !== 'All Topics') {
-        subjQuestions = subjQuestions.filter(q => q.topic === topicFilter);
+        const topicQuestions = subjQuestions.filter(q => q.topic === topicFilter);
+        // Keep the full subject bank when a topic has fewer than the requested
+        // 20 offline items, so topic selection cannot block subject practice.
+        if (topicQuestions.length >= questionsPerSubject) subjQuestions = topicQuestions;
       }
 
       if (subjQuestions.length < questionsPerSubject) {
@@ -269,14 +273,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (shortages.length > 0) {
       showToast(
-        `This exam needs ${questionsPerSubject} approved questions per subject. Missing: ${shortages.join(', ')}. Generate and publish the remaining questions from the Admin Question Generator.`,
+        `The offline practice bank is still loading. Missing: ${shortages.join(', ')}. Refresh the page and try again.`,
         'error',
       );
       return;
     }
 
     if (selectedQuestionIds.length === 0) {
-      showToast('No approved questions found for the selected subject(s). Please choose other subjects or ask Admin to generate questions.', 'error');
+      showToast('No offline practice questions are available yet. Refresh the page and try again.', 'error');
       return;
     }
 

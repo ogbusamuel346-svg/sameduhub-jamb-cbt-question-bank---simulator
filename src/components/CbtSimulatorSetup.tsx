@@ -109,7 +109,8 @@ export const CbtSimulatorSetup: React.FC = () => {
     }
   };
 
-  const approvedQuestionsCount = questions.filter(q => q.status === 'approved').length;
+  const practiceQuestions = questions.filter(q => q.id.startsWith('offline-'));
+  const practiceQuestionsCount = practiceQuestions.length;
   const coverageSubjects = mode === 'full_jamb'
     ? selectedSubjects
     : mode === 'quick_mock'
@@ -117,9 +118,10 @@ export const CbtSimulatorSetup: React.FC = () => {
       : [singleSubject];
   const requestedQuestionsPerSubject = mode === 'quick_mock' ? 5 : questionsCount;
   const questionCoverage = coverageSubjects.map(subjectId => {
-    let available = questions.filter(question => question.status === 'approved' && question.subjectId === subjectId);
+    let available = practiceQuestions.filter(question => question.subjectId === subjectId);
     if (mode === 'subject_practice' && selectedTopic !== 'All Topics') {
-      available = available.filter(question => question.topic === selectedTopic);
+      const topicQuestions = available.filter(question => question.topic === selectedTopic);
+      if (topicQuestions.length >= requestedQuestionsPerSubject) available = topicQuestions;
     }
     return {
       subjectId,
@@ -444,7 +446,7 @@ export const CbtSimulatorSetup: React.FC = () => {
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-xs text-slate-500 flex items-center gap-1.5">
             <Info className="w-4 h-4 text-blue-600 shrink-0" />
-            <span>Ready with {approvedQuestionsCount} verified questions, including the built-in offline practice bank.</span>
+            <span>Ready with {practiceQuestionsCount} built-in offline questions. No approval is required.</span>
           </div>
 
           <div className={`w-full sm:w-auto text-[11px] rounded-xl border px-3 py-2 ${hasCompleteCoverage ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>

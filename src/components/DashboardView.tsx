@@ -33,7 +33,7 @@ export const DashboardView: React.FC = () => {
   const [selectedExamType, setSelectedExamType] = useState<'full_jamb' | 'subject_practice' | 'quick_mock'>('full_jamb');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('english');
 
-  const approvedQuestions = questions.filter(q => q.status === 'approved');
+  const practiceQuestions = questions.filter(q => q.id.startsWith('offline-'));
 
   const handleStartExam = () => {
     if (selectedExamType === 'full_jamb') {
@@ -173,7 +173,7 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-            {approvedQuestions.length} Questions Ready
+            {practiceQuestions.length} Offline Questions Ready
           </span>
         </div>
 
