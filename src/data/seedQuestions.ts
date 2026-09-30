@@ -1,6 +1,7 @@
 import { Question } from '../types/index.ts';
+import { OFFLINE_QUESTIONS } from './offlineQuestions.ts';
 
-export const INITIAL_QUESTIONS: Question[] = [
+const CURATED_INITIAL_QUESTIONS: Question[] = [
   // --- USE OF ENGLISH ---
   {
     id: 'eng-001',
@@ -477,4 +478,9 @@ export const INITIAL_QUESTIONS: Question[] = [
     updatedAt: '2026-02-02T16:20:00Z',
     createdBy: 'Dr. Mary Okon (Physics Dept)'
   }
+];
+
+export const INITIAL_QUESTIONS: Question[] = [
+  ...CURATED_INITIAL_QUESTIONS,
+  ...OFFLINE_QUESTIONS,
 ];

@@ -57,6 +57,10 @@ JAMB questions, and are published automatically for candidate practice after
 validation. Admins can still edit or remove them from the question bank. They
 are organized by subject, topic, and difficulty.
 
+Candidate CBT practice also includes a built-in offline bank of 20 approved
+original practice questions for each configured subject. It loads into local
+storage and does not require OpenRouter or another AI provider.
+
 For Vercel, configure `DATABASE_URL`, `VITE_SUPABASE_URL`,
 `VITE_SUPABASE_PUBLISHABLE_KEY`, `AUTH_ADMIN_EMAILS`, and `OPENROUTER_API_KEY` in
 the project environment settings. The repository includes

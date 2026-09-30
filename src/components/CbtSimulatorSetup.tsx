@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS, SUBJECT_TOPICS } from '../data/subjects.ts';
+import { JAMB_SUBJECTS, OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT, SUBJECT_TOPICS } from '../data/subjects.ts';
 import {
   PlayCircle,
   Clock,
@@ -30,7 +30,7 @@ export const CbtSimulatorSetup: React.FC = () => {
 
   const [singleSubject, setSingleSubject] = useState<string>('english');
   const [selectedTopic, setSelectedTopic] = useState<string>('All Topics');
-  const [questionsCount, setQuestionsCount] = useState<number>(JAMB_QUESTIONS_PER_SUBJECT);
+  const [questionsCount, setQuestionsCount] = useState<number>(OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT);
   const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(30);
 
   // Subject presets for Nigerian university courses
@@ -419,9 +419,7 @@ export const CbtSimulatorSetup: React.FC = () => {
             >
               <option value="5">5 Questions (Quick Test)</option>
               <option value="10">10 Questions (Standard Drill)</option>
-              <option value="20">20 Questions (Extended Practice)</option>
-              <option value="40">40 Questions (Official JAMB Quota)</option>
-              <option value={JAMB_QUESTIONS_PER_SUBJECT}>{JAMB_QUESTIONS_PER_SUBJECT} Questions (Full Subject Practice)</option>
+              <option value={OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT}>{OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT} Questions (Full Offline Subject Practice)</option>
             </select>
           </div>
 
@@ -446,7 +444,7 @@ export const CbtSimulatorSetup: React.FC = () => {
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-xs text-slate-500 flex items-center gap-1.5">
             <Info className="w-4 h-4 text-blue-600 shrink-0" />
-            <span>Ready with {approvedQuestionsCount} verified questions in database.</span>
+            <span>Ready with {approvedQuestionsCount} verified questions, including the built-in offline practice bank.</span>
           </div>
 
           <div className={`w-full sm:w-auto text-[11px] rounded-xl border px-3 py-2 ${hasCompleteCoverage ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>

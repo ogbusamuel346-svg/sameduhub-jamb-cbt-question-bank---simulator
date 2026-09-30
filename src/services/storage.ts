@@ -38,6 +38,15 @@ export const StorageService = {
         localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(INITIAL_QUESTIONS));
         return INITIAL_QUESTIONS;
       }
+      // Add newly shipped offline questions to existing browsers without
+      // overwriting questions the user imported, edited, or generated.
+      const existingIds = new Set(parsed.map(question => question?.id).filter(Boolean));
+      const missingInitialQuestions = INITIAL_QUESTIONS.filter(question => !existingIds.has(question.id));
+      if (missingInitialQuestions.length > 0) {
+        const merged = [...parsed, ...missingInitialQuestions];
+        localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(merged));
+        return merged;
+      }
       return parsed;
     } catch {
       return INITIAL_QUESTIONS;

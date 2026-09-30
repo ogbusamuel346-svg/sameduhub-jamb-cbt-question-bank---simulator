@@ -9,7 +9,7 @@ import {
   GenerationDifficulty,
   QuestionGenerationScope,
 } from '../types/index.ts';
-import { JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS } from '../data/subjects.ts';
+import { JAMB_SUBJECTS, OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT } from '../data/subjects.ts';
 import {
   StorageService,
   DEFAULT_NEON_CONFIG,
@@ -241,7 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const executeCbtTest = (config: CbtExamConfig, candidateUser: User) => {
-    const { mode, subjects, questionsPerSubject = JAMB_QUESTIONS_PER_SUBJECT, customTimeMinutes, topicFilter } = config;
+    const { mode, subjects, questionsPerSubject = OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT, customTimeMinutes, topicFilter } = config;
     
     // Filter approved questions only for real test simulation
     const approved = questions.filter(q => q.status === 'approved');
