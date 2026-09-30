@@ -669,7 +669,9 @@ async function generateQuestions(
   count: number,
   createdBy: string,
   scope: typeof QUESTION_GENERATION_SCOPES[number] = 'topic',
-) {
+  topicOffset = 0,
+  totalCount = count,
+): Promise<any[]> {
   const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!openRouterApiKey) {
     throw new HttpError(503, 'Question generation is not configured. Add OPENROUTER_API_KEY to the server environment.');
@@ -681,9 +683,30 @@ async function generateQuestions(
   const syllabusTopics = SUBJECT_TOPICS[subjectId] || [];
   if (syllabusTopics.length === 0) throw new HttpError(400, 'This subject has no syllabus topics configured yet.');
 
+  const questionsPerRequest = Math.max(1, Math.min(3, Number(process.env.OPENROUTER_QUESTIONS_PER_REQUEST) || 3));
+  if (count > questionsPerRequest) {
+    const batchedQuestions = [];
+    for (let offset = 0; offset < count; offset += questionsPerRequest) {
+      const batchCount = Math.min(questionsPerRequest, count - offset);
+      const batch: any[] = await generateQuestions(
+        subjectId,
+        topic,
+        difficulty,
+        batchCount,
+        createdBy,
+        scope,
+        topicOffset + offset,
+        totalCount,
+      );
+      batchedQuestions.push(...batch);
+    }
+    return batchedQuestions;
+  }
+
   const wholeSubject = scope === 'whole_subject';
-  const topicPlan = buildTopicPlan(wholeSubject ? syllabusTopics : [topic], count);
-  const coveragePlan = topicPlan.map((plannedTopic, index) => `${index + 1}. ${plannedTopic}`).join('\n');
+  const topicPlan = buildTopicPlan(wholeSubject ? syllabusTopics : [topic], totalCount)
+    .slice(topicOffset, topicOffset + count);
+  const coveragePlan = topicPlan.map((plannedTopic, index) => `${topicOffset + index + 1}. ${plannedTopic}`).join('\n');
   const difficultyInstructions = difficulty === 'mixed'
     ? 'Use a balanced JAMB-style mix: approximately 25% easy, 50% medium, and 25% hard. Include the actual difficulty for every item.'
     : `Every item must have difficulty "${difficulty}".`;
@@ -715,6 +738,7 @@ Each question must have four distinct options, exactly one defensible correct an
   const baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
   const siteUrl = process.env.OPENROUTER_SITE_URL?.trim() || process.env.APP_URL?.trim();
   const siteName = process.env.OPENROUTER_SITE_NAME?.trim() || 'SamEduHub';
+  const maxOutputTokens = Math.max(256, Math.min(1200, Number(process.env.OPENROUTER_MAX_OUTPUT_TOKENS) || 1200));
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -728,7 +752,7 @@ Each question must have four distinct options, exactly one defensible correct an
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.55,
-      max_tokens: Math.min(65536, 1800 + count * 560),
+      max_tokens: maxOutputTokens,
       response_format: { type: 'json_object' },
     }),
   });
@@ -776,7 +800,7 @@ Each question must have four distinct options, exactly one defensible correct an
       const validDifficulty = difficulty === 'mixed'
         ? QUESTION_DIFFICULTIES.includes(item?.difficulty)
           ? item.difficulty
-          : balancedDifficultyAt(index, count)
+          : balancedDifficultyAt(topicOffset + index, totalCount)
         : difficulty;
       const valid = questionText
         && optionValues.every(Boolean)
@@ -791,7 +815,7 @@ Each question must have four distinct options, exactly one defensible correct an
 
       const now = new Date().toISOString();
       return {
-        id: `ai-generated-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `ai-generated-${Date.now()}-${topicOffset + index}-${Math.random().toString(36).slice(2, 7)}`,
         subjectId,
         topic: topicPlan[index] || topic,
         difficulty: validDifficulty,

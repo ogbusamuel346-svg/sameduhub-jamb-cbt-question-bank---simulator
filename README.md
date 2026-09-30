@@ -48,6 +48,9 @@ and 1–60 questions. Whole-subject generation distributes the batch across all
 configured syllabus topics. Generation uses the server-side `OPENROUTER_API_KEY`
 and the JAMB IBASS syllabus reference at
 https://ibass.jamb.gov.ng/.
+To support small OpenRouter token limits, requests are generated in batches of
+three questions with up to 1,200 output tokens per request; the server combines
+the batches into the requested set.
 
 Generated items are clearly labeled as AI practice questions, are not official
 JAMB questions, and are published automatically for candidate practice after
