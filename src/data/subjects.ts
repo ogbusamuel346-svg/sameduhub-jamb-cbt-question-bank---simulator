@@ -1,6 +1,7 @@
 import { Subject } from '../types/index.ts';
 
 export const JAMB_QUESTIONS_PER_SUBJECT = 60;
+export const AI_QUESTIONS_PER_REQUEST = 3;
 
 export const JAMB_SUBJECTS: Subject[] = [
   {

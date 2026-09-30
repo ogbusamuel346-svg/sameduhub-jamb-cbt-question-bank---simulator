@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from '../data/subjects.ts';
+import { AI_QUESTIONS_PER_REQUEST, JAMB_QUESTIONS_PER_SUBJECT, JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from '../data/subjects.ts';
 import { GenerationDifficulty, OptionKey, Question, QuestionGenerationScope } from '../types/index.ts';
 import { QuestionEditorModal } from './QuestionEditorModal.tsx';
 import {
@@ -28,6 +28,8 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
   const [difficulty, setDifficulty] = useState<GenerationDifficulty>('mixed');
   const [count, setCount] = useState(60);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ completed: number; total: number; subjectName: string } | null>(null);
+  const [generationError, setGenerationError] = useState('');
   const [generatedIds, setGeneratedIds] = useState<string[]>([]);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
 
@@ -48,28 +50,54 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
   const handleGenerate = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsGenerating(true);
+    setGenerationError('');
+    setGeneratedIds([]);
+
+    const subjectsToGenerate = isAllSubjects ? JAMB_SUBJECTS : JAMB_SUBJECTS.filter(subject => subject.id === subjectId);
+    const questionsPerSubject = isAllSubjects
+      ? JAMB_QUESTIONS_PER_SUBJECT
+      : Math.min(JAMB_QUESTIONS_PER_SUBJECT, Math.max(1, Number(count) || 1));
+    const totalRequests = subjectsToGenerate.reduce(
+      (total, subject) => total + Math.ceil(questionsPerSubject / AI_QUESTIONS_PER_REQUEST),
+      0,
+    );
+    let completedRequests = 0;
+    const generatedBatch: Question[] = [];
+
     try {
-      const subjectsToGenerate = isAllSubjects ? JAMB_SUBJECTS : JAMB_SUBJECTS.filter(subject => subject.id === subjectId);
-      const generatedBatch: Question[] = [];
-
       for (const subject of subjectsToGenerate) {
-        const generatedQuestions = await generateQuestions({
-          subjectId: subject.id,
-          scope: isAllSubjects ? 'whole_subject' : scope,
-          topic: !isAllSubjects && scope === 'topic' ? topic : '',
-          difficulty,
-          count: isAllSubjects ? JAMB_QUESTIONS_PER_SUBJECT : Math.min(JAMB_QUESTIONS_PER_SUBJECT, Math.max(1, Number(count) || 1)),
-        });
-        generatedBatch.push(...generatedQuestions);
-        if (generatedQuestions.length === 0) break;
-      }
+        for (let topicOffset = 0; topicOffset < questionsPerSubject; topicOffset += AI_QUESTIONS_PER_REQUEST) {
+          const batchCount = Math.min(AI_QUESTIONS_PER_REQUEST, questionsPerSubject - topicOffset);
+          setGenerationProgress({ completed: completedRequests, total: totalRequests, subjectName: subject.name });
 
+          const generatedQuestions = await generateQuestions({
+            subjectId: subject.id,
+            scope: isAllSubjects ? 'whole_subject' : scope,
+            topic: !isAllSubjects && scope === 'topic' ? topic : '',
+            difficulty,
+            count: batchCount,
+            topicOffset,
+            totalCount: questionsPerSubject,
+          });
+
+          if (generatedQuestions.length !== batchCount) {
+            throw new Error(`The AI returned ${generatedQuestions.length} questions for this batch instead of ${batchCount}.`);
+          }
+
+          generatedBatch.push(...generatedQuestions);
+          completedRequests += 1;
+          setGenerationProgress({ completed: completedRequests, total: totalRequests, subjectName: subject.name });
+        }
+      }
+    } catch (error: any) {
+      setGenerationError(error?.message || 'Question generation stopped before all batches completed.');
+    } finally {
       if (generatedBatch.length > 0) {
-        setGeneratedIds(previous => isAllSubjects
-          ? [...generatedBatch.map(question => question.id), ...previous]
+        setGeneratedIds(isAllSubjects
+          ? generatedBatch.map(question => question.id)
           : generatedBatch.map(question => question.id));
       }
-    } finally {
+      setGenerationProgress(null);
       setIsGenerating(false);
     }
   };
@@ -151,13 +179,24 @@ export const AdminQuestionGenerator: React.FC<AdminQuestionGeneratorProps> = ({ 
               <input type="number" min={1} max={JAMB_QUESTIONS_PER_SUBJECT} value={isAllSubjects ? JAMB_QUESTIONS_PER_SUBJECT : count} disabled={isAllSubjects} onChange={event => setCount(Math.min(JAMB_QUESTIONS_PER_SUBJECT, Math.max(1, Number(event.target.value) || 1)))} className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-sm disabled:bg-slate-100 disabled:text-slate-500" />
             </label>
             <div className="md:col-span-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] text-slate-500">{isAllSubjects ? `This publishes ${JAMB_QUESTIONS_PER_SUBJECT} questions for each of the ${JAMB_SUBJECTS.length} JAMB subjects.` : 'The batch is distributed across the selected subject topics and published immediately for candidate practice.'}</p>
+              <div className="text-[11px] text-slate-500">
+                <p>{isAllSubjects ? `This publishes ${JAMB_QUESTIONS_PER_SUBJECT} questions for each of the ${JAMB_SUBJECTS.length} JAMB subjects.` : 'The batch is distributed across the selected subject topics and published immediately for candidate practice.'}</p>
+                {generationProgress && <p className="mt-1 font-semibold text-indigo-700">{generationProgress.subjectName}: completed {generationProgress.completed} of {generationProgress.total} AI batches.</p>}
+              </div>
               <button type="submit" disabled={isGenerating || (scope === 'topic' && !topic)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-60 text-white text-xs font-bold shadow-md">
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                 {isGenerating ? (isAllSubjects ? 'Generating all subject banks…' : 'Generating questions…') : (isAllSubjects ? `Generate ${JAMB_QUESTIONS_PER_SUBJECT} per subject` : 'Generate question batch')}
               </button>
             </div>
           </form>
+
+          {generationError && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+              <strong className="block mb-1">Question generation stopped</strong>
+              {generationError}
+              {generatedIds.length > 0 && <span className="block mt-1">Questions completed before the error remain published.</span>}
+            </div>
+          )}
 
           {generatedQuestions.length > 0 && (
             <section className="space-y-4">

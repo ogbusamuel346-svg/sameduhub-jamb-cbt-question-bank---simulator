@@ -46,6 +46,8 @@ export interface QuestionGenerationRequest {
   scope?: QuestionGenerationScope;
   difficulty: GenerationDifficulty;
   count: number;
+  topicOffset?: number;
+  totalCount?: number;
 }
 
 async function authenticatedHeaders(): Promise<HeadersInit> {
@@ -132,20 +134,28 @@ export const NeonApiService = {
   },
 
   async generateQuestions(input: QuestionGenerationRequest): Promise<QuestionsApiResponse> {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 45000);
     try {
       const res = await fetch('/api/questions/generate', {
         method: 'POST',
         credentials: 'include',
         headers: await authenticatedHeaders(),
         body: JSON.stringify(input),
+        signal: controller.signal,
       });
       return await readResponse<QuestionsApiResponse>(res);
     } catch (err: any) {
+      const message = err?.name === 'AbortError'
+        ? 'Question generation timed out while waiting for the AI provider. Try the batch again.'
+        : err.message || 'Unable to generate questions.';
       return {
         success: false,
         questions: [],
-        error: err.message || 'Unable to generate questions.',
+        error: message,
       };
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   },
 

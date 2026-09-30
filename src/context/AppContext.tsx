@@ -72,6 +72,8 @@ interface AppContextType {
     scope?: QuestionGenerationScope;
     difficulty: GenerationDifficulty;
     count: number;
+    topicOffset?: number;
+    totalCount?: number;
   }) => Promise<Question[]>;
 
   // CBT Exam actions
@@ -629,16 +631,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     scope?: QuestionGenerationScope;
     difficulty: GenerationDifficulty;
     count: number;
+    topicOffset?: number;
+    totalCount?: number;
   }): Promise<Question[]> => {
     if (!isAdminSession) {
-      showToast('Only authenticated admins can generate questions.', 'error');
-      return [];
+      const error = 'Only authenticated admins can generate questions.';
+      showToast(error, 'error');
+      throw new Error(error);
     }
 
     const result = await NeonApiService.generateQuestions(input);
     if (!result.success) {
-      showToast(result.error || 'Unable to generate questions.', 'error');
-      return [];
+      const error = result.error || 'Unable to generate questions.';
+      showToast(error, 'error');
+      throw new Error(error);
     }
 
     setQuestions(previous => {

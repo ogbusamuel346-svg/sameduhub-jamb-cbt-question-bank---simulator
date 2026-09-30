@@ -10,7 +10,7 @@ import {
   scrypt as scryptCallback,
   timingSafeEqual,
 } from 'crypto';
-import { JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from './src/data/subjects.ts';
+import { AI_QUESTIONS_PER_REQUEST, JAMB_SUBJECTS, JAMB_SYLLABUS_SOURCE_URL, SUBJECT_TOPICS } from './src/data/subjects.ts';
 
 // Load local secrets for the server as well as Vite. `.env.local` is the
 // documented place for OPENROUTER_API_KEY during local development, while `.env`
@@ -683,24 +683,9 @@ async function generateQuestions(
   const syllabusTopics = SUBJECT_TOPICS[subjectId] || [];
   if (syllabusTopics.length === 0) throw new HttpError(400, 'This subject has no syllabus topics configured yet.');
 
-  const questionsPerRequest = Math.max(1, Math.min(3, Number(process.env.OPENROUTER_QUESTIONS_PER_REQUEST) || 3));
+  const questionsPerRequest = Math.max(1, Math.min(AI_QUESTIONS_PER_REQUEST, Number(process.env.OPENROUTER_QUESTIONS_PER_REQUEST) || AI_QUESTIONS_PER_REQUEST));
   if (count > questionsPerRequest) {
-    const batchedQuestions = [];
-    for (let offset = 0; offset < count; offset += questionsPerRequest) {
-      const batchCount = Math.min(questionsPerRequest, count - offset);
-      const batch: any[] = await generateQuestions(
-        subjectId,
-        topic,
-        difficulty,
-        batchCount,
-        createdBy,
-        scope,
-        topicOffset + offset,
-        totalCount,
-      );
-      batchedQuestions.push(...batch);
-    }
-    return batchedQuestions;
+    throw new HttpError(400, `Generate at most ${questionsPerRequest} questions per request. The admin generator will split larger banks into smaller batches.`);
   }
 
   const wholeSubject = scope === 'whole_subject';
@@ -1361,6 +1346,8 @@ export async function createApiApp() {
       const difficulty = typeof req.body?.difficulty === 'string' ? req.body.difficulty.trim() : '';
       const scope = typeof req.body?.scope === 'string' ? req.body.scope.trim() : 'topic';
       const count = Number(req.body?.count);
+      const topicOffset = Number(req.body?.topicOffset ?? 0);
+      const totalCount = Number(req.body?.totalCount ?? count);
       const subject = JAMB_SUBJECTS.find(item => item.id === subjectId);
 
       if (!subject || !QUESTION_GENERATION_SCOPES.includes(scope as typeof QUESTION_GENERATION_SCOPES[number])) {
@@ -1375,6 +1362,9 @@ export async function createApiApp() {
       if (!Number.isInteger(count) || count < 1 || count > 60) {
         throw new HttpError(400, 'Question count must be a whole number from 1 to 60.');
       }
+      if (!Number.isInteger(topicOffset) || topicOffset < 0 || !Number.isInteger(totalCount) || totalCount < count || totalCount > 60 || topicOffset + count > totalCount) {
+        throw new HttpError(400, 'Invalid question batch coverage range.');
+      }
 
       const questions = await generateQuestions(
         subjectId,
@@ -1383,6 +1373,8 @@ export async function createApiApp() {
         count,
         admin.name,
         scope as typeof QUESTION_GENERATION_SCOPES[number],
+        topicOffset,
+        totalCount,
       );
       const publishedQuestions = await publishGeneratedQuestions(questions);
       return res.json({
