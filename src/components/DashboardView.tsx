@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { JAMB_SUBJECTS } from '../data/subjects.ts';
+import { JAMB_SUBJECTS, OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT } from '../data/subjects.ts';
 import {
   GraduationCap,
   PlayCircle,
@@ -45,7 +45,7 @@ export const DashboardView: React.FC = () => {
       startCbtTest({
         mode: 'full_jamb',
         subjects,
-        questionsPerSubject: 10,
+        questionsPerSubject: OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT,
         customTimeMinutes: 120
       });
     } else if (selectedExamType === 'quick_mock') {
@@ -59,7 +59,7 @@ export const DashboardView: React.FC = () => {
       startCbtTest({
         mode: 'subject_practice',
         subjects: [selectedSubjectId],
-        questionsPerSubject: 10,
+        questionsPerSubject: OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT,
         customTimeMinutes: 20
       });
     }

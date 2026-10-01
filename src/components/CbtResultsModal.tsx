@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
+import { OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT } from '../data/subjects.ts';
 import { OptionKey, Question } from '../types/index.ts';
 import {
   Trophy,
@@ -465,7 +466,7 @@ export const CbtResultsModal: React.FC = () => {
             onClick={() => startCbtTest({
               mode: session.mode,
               subjects: session.subjects,
-              questionsPerSubject: 10
+              questionsPerSubject: OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT
             })}
             className="px-6 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-md cursor-pointer transition-all flex items-center gap-2"
           >
