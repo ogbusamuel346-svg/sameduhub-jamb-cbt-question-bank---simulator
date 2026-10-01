@@ -1,5 +1,6 @@
 import { Difficulty, OptionKey, Question } from '../types/index.ts';
 import { SUBJECT_TOPICS } from './subjects.ts';
+import { ADDITIONAL_OFFLINE_BANKS } from './additionalOfflineQuestions.ts';
 
 type OfflineSeed = [number, Difficulty, string, string, string, string, string, OptionKey, string];
 
@@ -228,7 +229,14 @@ const OFFLINE_BANKS: Record<string, OfflineSeed[]> = {
   ],
 };
 
-export const OFFLINE_QUESTIONS: Question[] = Object.entries(OFFLINE_BANKS).flatMap(([subjectId, seeds]) => {
+const ALL_OFFLINE_BANKS: Record<string, OfflineSeed[]> = Object.fromEntries(
+  Object.keys({ ...OFFLINE_BANKS, ...ADDITIONAL_OFFLINE_BANKS }).map(subjectId => [
+    subjectId,
+    [...(OFFLINE_BANKS[subjectId] || []), ...(ADDITIONAL_OFFLINE_BANKS[subjectId] || [])],
+  ]),
+);
+
+export const OFFLINE_QUESTIONS: Question[] = Object.entries(ALL_OFFLINE_BANKS).flatMap(([subjectId, seeds]) => {
   const topics = SUBJECT_TOPICS[subjectId] || [];
   return seeds.map(([topicIndex, difficulty, questionText, a, b, c, d, correctAnswer, explanation], index) => ({
     id: `offline-${subjectId}-${String(index + 1).padStart(2, '0')}`,

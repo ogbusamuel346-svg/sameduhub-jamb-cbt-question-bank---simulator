@@ -255,7 +255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (topicFilter && topicFilter !== 'All Topics') {
         const topicQuestions = subjQuestions.filter(q => q.topic === topicFilter);
         // Keep the full subject bank when a topic has fewer than the requested
-        // 20 offline items, so topic selection cannot block subject practice.
+        // 40 offline items, so topic selection cannot block subject practice.
         if (topicQuestions.length >= questionsPerSubject) subjQuestions = topicQuestions;
       }
 
