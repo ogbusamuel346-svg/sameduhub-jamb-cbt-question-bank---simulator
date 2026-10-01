@@ -32,6 +32,13 @@ export const CbtSimulatorSetup: React.FC = () => {
   const [selectedTopic, setSelectedTopic] = useState<string>('All Topics');
   const [questionsCount, setQuestionsCount] = useState<number>(OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT);
   const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(30);
+  const [subjectCount, setSubjectCount] = useState<number>(4);
+
+  const subjectsForFullExam = Array.from(new Set([
+    'english',
+    ...selectedSubjects,
+    ...JAMB_SUBJECTS.map(subject => subject.id),
+  ])).slice(0, subjectCount);
 
   // Subject presets for Nigerian university courses
   const presets = [
@@ -63,31 +70,40 @@ export const CbtSimulatorSetup: React.FC = () => {
   }, [singleSubject]);
 
   const handleToggleSubject = (subjectId: string) => {
-    if (subjectId === 'english') {
+    if (subjectId === 'english' || subjectCount === 1) {
       // English is compulsory in JAMB!
       return;
     }
 
-    if (selectedSubjects.includes(subjectId)) {
-      if (selectedSubjects.length <= 1) return;
-      setSelectedSubjects(selectedSubjects.filter(s => s !== subjectId));
-    } else {
-      if (selectedSubjects.length >= 4) {
-        // Replace the last non-english subject
-        const withoutEnglish = selectedSubjects.filter(s => s !== 'english');
-        const newSelected = ['english', ...withoutEnglish.slice(0, 2), subjectId];
-        setSelectedSubjects(newSelected);
-      } else {
-        setSelectedSubjects([...selectedSubjects, subjectId]);
+    setSelectedSubjects(currentSubjects => {
+      if (currentSubjects.includes(subjectId)) {
+        return currentSubjects.filter(subject => subject !== subjectId);
       }
-    }
+
+      if (currentSubjects.length >= subjectCount) {
+        // Keep English and replace the last selected optional subject.
+        const withoutEnglish = currentSubjects.filter(subject => subject !== 'english');
+        return ['english', ...withoutEnglish.slice(0, Math.max(0, subjectCount - 2)), subjectId];
+      }
+
+      return [...currentSubjects, subjectId];
+    });
+  };
+
+  const handleSubjectCountChange = (nextCount: number) => {
+    setSubjectCount(nextCount);
+    setSelectedSubjects(currentSubjects => Array.from(new Set([
+      'english',
+      ...currentSubjects,
+      ...JAMB_SUBJECTS.map(subject => subject.id),
+    ])).slice(0, nextCount));
   };
 
   const handleLaunch = () => {
     if (mode === 'full_jamb') {
       startCbtTest({
         mode: 'full_jamb',
-        subjects: selectedSubjects,
+          subjects: subjectsForFullExam,
         questionsPerSubject: questionsCount,
         customTimeMinutes: customTimeMinutes,
       });
@@ -112,7 +128,7 @@ export const CbtSimulatorSetup: React.FC = () => {
   const practiceQuestions = questions.filter(q => q.id.startsWith('offline-'));
   const practiceQuestionsCount = practiceQuestions.length;
   const coverageSubjects = mode === 'full_jamb'
-    ? selectedSubjects
+    ? subjectsForFullExam
     : mode === 'quick_mock'
       ? ['english', 'mathematics', 'physics', 'chemistry']
       : [singleSubject];
@@ -296,15 +312,27 @@ export const CbtSimulatorSetup: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div>
                 <h3 className="font-bold text-base text-slate-900">
-                  Select Your 4 JAMB Subjects (English is Compulsory)
+                  Select Your JAMB Subjects (English is Compulsory)
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Choose exactly 4 subjects or click a faculty preset below.
+                  Choose the number of subjects you want, then use the cards below to select them.
                 </p>
               </div>
-              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-800">
-                {selectedSubjects.length} of 4 selected
-              </span>
+              <div className="flex items-center gap-2">
+                <label htmlFor="subject-count" className="text-xs font-bold text-slate-700 whitespace-nowrap">
+                  Subjects
+                </label>
+                <select
+                  id="subject-count"
+                  value={subjectCount}
+                  onChange={event => handleSubjectCountChange(Number(event.target.value))}
+                  className="px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-bold text-blue-800 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                >
+                  {[1, 2, 3, 4].map(count => (
+                    <option key={count} value={count}>{count}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Presets */}
@@ -313,7 +341,10 @@ export const CbtSimulatorSetup: React.FC = () => {
                 <button
                   key={p.name}
                   type="button"
-                  onClick={() => setSelectedSubjects(p.subjects)}
+                  onClick={() => {
+                    setSelectedSubjects(p.subjects);
+                    setSubjectCount(p.subjects.length);
+                  }}
                   className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-all cursor-pointer"
                 >
                   <div className="font-bold text-xs text-slate-900">{p.name}</div>
@@ -429,16 +460,15 @@ export const CbtSimulatorSetup: React.FC = () => {
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
               Time Allowed (Minutes)
             </label>
-            <select
+            <input
+              type="number"
+              min="1"
+              max="300"
               value={customTimeMinutes}
-              onChange={e => setCustomTimeMinutes(Number(e.target.value))}
+              onChange={e => setCustomTimeMinutes(Math.min(300, Math.max(1, Number(e.target.value) || 1)))}
               className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-            >
-              <option value="15">15 Minutes (High Speed)</option>
-              <option value="30">30 Minutes (Recommended)</option>
-              <option value="60">60 Minutes (1 Hour)</option>
-              <option value="120">120 Minutes (Official 2 Hours UTME Standard)</option>
-            </select>
+            />
+            <p className="text-[11px] text-slate-500 mt-1.5">Set any duration from 1 to 300 minutes.</p>
           </div>
         </div>
 

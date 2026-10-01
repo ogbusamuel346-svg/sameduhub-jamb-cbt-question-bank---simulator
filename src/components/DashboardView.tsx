@@ -32,35 +32,49 @@ export const DashboardView: React.FC = () => {
   // Quick Examination Selector state on homepage
   const [selectedExamType, setSelectedExamType] = useState<'full_jamb' | 'subject_practice' | 'quick_mock'>('full_jamb');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('english');
+  const [selectedSubjectCount, setSelectedSubjectCount] = useState<number>(4);
+  const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(120);
 
   const practiceQuestions = questions.filter(q => q.id.startsWith('offline-'));
+
+  const selectExamType = (examType: 'full_jamb' | 'subject_practice' | 'quick_mock') => {
+    setSelectedExamType(examType);
+    setCustomTimeMinutes(examType === 'full_jamb' ? 120 : examType === 'quick_mock' ? 15 : 20);
+  };
 
   const handleStartExam = () => {
     if (selectedExamType === 'full_jamb') {
       // 4 subjects (English + user's combination or default science)
-      const subjects = user?.selectedSubjects && user.selectedSubjects.length >= 4
-        ? user.selectedSubjects.slice(0, 4)
+      const subjectPool = user?.selectedSubjects && user.selectedSubjects.length > 0
+        ? user.selectedSubjects
         : ['english', 'mathematics', 'physics', 'chemistry'];
+      const subjects = Array.from(new Set([
+        'english',
+        ...subjectPool,
+        'mathematics',
+        'physics',
+        'chemistry',
+      ])).slice(0, selectedSubjectCount);
       
       startCbtTest({
         mode: 'full_jamb',
         subjects,
         questionsPerSubject: OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT,
-        customTimeMinutes: 120
+        customTimeMinutes
       });
     } else if (selectedExamType === 'quick_mock') {
       startCbtTest({
         mode: 'quick_mock',
         subjects: ['english', 'mathematics'],
         questionsPerSubject: 10,
-        customTimeMinutes: 15
+        customTimeMinutes
       });
     } else {
       startCbtTest({
         mode: 'subject_practice',
         subjects: [selectedSubjectId],
         questionsPerSubject: OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT,
-        customTimeMinutes: 20
+        customTimeMinutes
       });
     }
   };
@@ -182,7 +196,7 @@ export const DashboardView: React.FC = () => {
           {/* Option 1: Full JAMB Mock */}
           <button
             type="button"
-            onClick={() => setSelectedExamType('full_jamb')}
+            onClick={() => selectExamType('full_jamb')}
             className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
               selectedExamType === 'full_jamb'
                 ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 shadow-xs'
@@ -216,7 +230,7 @@ export const DashboardView: React.FC = () => {
           {/* Option 2: Single Subject Drill */}
           <button
             type="button"
-            onClick={() => setSelectedExamType('subject_practice')}
+            onClick={() => selectExamType('subject_practice')}
             className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
               selectedExamType === 'subject_practice'
                 ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 shadow-xs'
@@ -250,7 +264,7 @@ export const DashboardView: React.FC = () => {
           {/* Option 3: Quick 15-Min Speed Challenge */}
           <button
             type="button"
-            onClick={() => setSelectedExamType('quick_mock')}
+            onClick={() => selectExamType('quick_mock')}
             className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
               selectedExamType === 'quick_mock'
                 ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 shadow-xs'
@@ -310,6 +324,42 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
         )}
+
+        <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {selectedExamType === 'full_jamb' && (
+            <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
+              <label htmlFor="dashboard-subject-count" className="block text-xs font-bold text-blue-900 mb-2">
+                Number of subjects
+              </label>
+              <select
+                id="dashboard-subject-count"
+                value={selectedSubjectCount}
+                onChange={event => setSelectedSubjectCount(Number(event.target.value))}
+                className="w-full px-3 py-2.5 rounded-xl bg-white border border-blue-200 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+              >
+                {[1, 2, 3, 4].map(count => (
+                  <option key={count} value={count}>{count} subject{count === 1 ? '' : 's'} (English compulsory)</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className={`p-4 rounded-2xl bg-orange-50 border border-orange-200 ${selectedExamType === 'full_jamb' ? '' : 'sm:col-span-2'}`}>
+            <label htmlFor="dashboard-time-minutes" className="block text-xs font-bold text-orange-900 mb-2">
+              Examination time (minutes)
+            </label>
+            <input
+              id="dashboard-time-minutes"
+              type="number"
+              min="1"
+              max="300"
+              value={customTimeMinutes}
+              onChange={event => setCustomTimeMinutes(Math.min(300, Math.max(1, Number(event.target.value) || 1)))}
+              className="w-full px-3 py-2.5 rounded-xl bg-white border border-orange-200 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-orange-500 focus:outline-hidden"
+            />
+            <p className="text-[11px] text-orange-800 mt-1.5">Choose any duration from 1 to 300 minutes.</p>
+          </div>
+        </div>
 
         {/* Big Action Button: Begin CBT Practice */}
         <div className="space-y-3">
