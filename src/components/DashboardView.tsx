@@ -33,32 +33,45 @@ export const DashboardView: React.FC = () => {
   const [selectedExamType, setSelectedExamType] = useState<'full_jamb' | 'subject_practice' | 'quick_mock'>('full_jamb');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('english');
   const [selectedSubjectCount, setSelectedSubjectCount] = useState<number>(4);
+  const [selectedFullSubjects, setSelectedFullSubjects] = useState<string[]>(['english', 'mathematics', 'physics', 'chemistry']);
   const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(120);
 
   const practiceQuestions = questions.filter(q => q.id.startsWith('offline-'));
+  const canStartExam = selectedExamType !== 'full_jamb' || selectedFullSubjects.length === selectedSubjectCount;
 
   const selectExamType = (examType: 'full_jamb' | 'subject_practice' | 'quick_mock') => {
     setSelectedExamType(examType);
     setCustomTimeMinutes(examType === 'full_jamb' ? 120 : examType === 'quick_mock' ? 15 : 20);
   };
 
+  const handleFullSubjectCountChange = (nextCount: number) => {
+    setSelectedSubjectCount(nextCount);
+    setSelectedFullSubjects(currentSubjects => Array.from(new Set([
+      ...currentSubjects,
+      ...JAMB_SUBJECTS.map(subject => subject.id),
+    ])).slice(0, nextCount));
+  };
+
+  const handleFullSubjectToggle = (subjectId: string) => {
+    setSelectedFullSubjects(currentSubjects => {
+      if (currentSubjects.includes(subjectId)) {
+        if (currentSubjects.length <= 1) return currentSubjects;
+        return currentSubjects.filter(subject => subject !== subjectId);
+      }
+
+      if (currentSubjects.length >= selectedSubjectCount) {
+        return [...currentSubjects.slice(0, Math.max(0, selectedSubjectCount - 1)), subjectId];
+      }
+
+      return [...currentSubjects, subjectId];
+    });
+  };
+
   const handleStartExam = () => {
     if (selectedExamType === 'full_jamb') {
-      // 4 subjects (English + user's combination or default science)
-      const subjectPool = user?.selectedSubjects && user.selectedSubjects.length > 0
-        ? user.selectedSubjects
-        : ['english', 'mathematics', 'physics', 'chemistry'];
-      const subjects = Array.from(new Set([
-        'english',
-        ...subjectPool,
-        'mathematics',
-        'physics',
-        'chemistry',
-      ])).slice(0, selectedSubjectCount);
-      
       startCbtTest({
         mode: 'full_jamb',
-        subjects,
+        subjects: selectedFullSubjects.slice(0, selectedSubjectCount),
         questionsPerSubject: OFFLINE_PRACTICE_QUESTIONS_PER_SUBJECT,
         customTimeMinutes
       });
@@ -328,17 +341,22 @@ export const DashboardView: React.FC = () => {
         <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {selectedExamType === 'full_jamb' && (
             <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
-              <label htmlFor="dashboard-subject-count" className="block text-xs font-bold text-blue-900 mb-2">
-                Number of subjects
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label htmlFor="dashboard-subject-count" className="block text-xs font-bold text-blue-900">
+                  Number of subjects
+                </label>
+                <span className="text-[11px] font-semibold text-blue-700">
+                  {selectedFullSubjects.length}/{selectedSubjectCount} selected
+                </span>
+              </div>
               <select
                 id="dashboard-subject-count"
                 value={selectedSubjectCount}
-                onChange={event => setSelectedSubjectCount(Number(event.target.value))}
+                onChange={event => handleFullSubjectCountChange(Number(event.target.value))}
                 className="w-full px-3 py-2.5 rounded-xl bg-white border border-blue-200 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
               >
                 {[1, 2, 3, 4].map(count => (
-                  <option key={count} value={count}>{count} subject{count === 1 ? '' : 's'} (English compulsory)</option>
+                  <option key={count} value={count}>{count} subject{count === 1 ? '' : 's'}</option>
                 ))}
               </select>
             </div>
@@ -361,11 +379,40 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
+        {selectedExamType === 'full_jamb' && (
+          <div className="mb-5 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <div className="text-xs font-bold text-slate-700 mb-2">
+              Select the subjects you want to take:
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+              {JAMB_SUBJECTS.map(subject => {
+                const isSelected = selectedFullSubjects.includes(subject.id);
+                return (
+                  <button
+                    key={subject.id}
+                    type="button"
+                    onClick={() => handleFullSubjectToggle(subject.id)}
+                    className={`p-2.5 rounded-xl text-left text-xs font-semibold border transition-all cursor-pointer flex items-center justify-between gap-1 ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="truncate">{subject.name}</span>
+                    {isSelected && <CheckCircle className="w-3.5 h-3.5 text-orange-300 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Big Action Button: Begin CBT Practice */}
         <div className="space-y-3">
           <button
             onClick={handleStartExam}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold text-base sm:text-lg shadow-lg shadow-orange-500/30 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2.5"
+            disabled={!canStartExam}
+            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 hover:from-orange-700 hover:to-amber-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-base sm:text-lg shadow-lg shadow-orange-500/30 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2.5"
           >
             {isAuthenticated ? (
               <PlayCircle className="w-6 h-6 shrink-0" />

@@ -11,7 +11,7 @@ export const JAMB_SUBJECTS: Subject[] = [
     code: 'ENG',
     icon: 'BookOpen',
     category: 'General',
-    description: 'Compulsory for all candidates: Comprehension, Lexis & Structure, Oral Forms, Antonyms & Synonyms.',
+    description: 'Comprehension, Lexis & Structure, Oral Forms, Antonyms & Synonyms.',
     defaultTimeMinutes: 40,
   },
   {

@@ -55,9 +55,8 @@ export const AuthModal: React.FC = () => {
   if (!isAuthModalOpen) return null;
 
   const handleToggleSubject = (subId: string) => {
-    if (subId === 'english') return; // English is compulsory in JAMB
     if (selectedSubjects.includes(subId)) {
-      if (selectedSubjects.length > 2) {
+      if (selectedSubjects.length > 1) {
         setSelectedSubjects(prev => prev.filter(s => s !== subId));
       }
     } else {
@@ -456,14 +455,12 @@ export const AuthModal: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Select 4 UTME Subjects ({selectedSubjects.length}/4)
+                    Select up to 4 UTME Subjects ({selectedSubjects.length}/4)
                   </label>
-                  <span className="text-[10px] text-slate-500">English is compulsory</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {JAMB_SUBJECTS.map(subj => {
                     const isSelected = selectedSubjects.includes(subj.id);
-                    const isCompulsory = subj.id === 'english';
                     return (
                       <button
                         key={subj.id}
@@ -478,9 +475,6 @@ export const AuthModal: React.FC = () => {
                         <span className="truncate pr-1">{subj.name}</span>
                         {isSelected && (
                           <CheckCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        )}
-                        {isCompulsory && (
-                          <span className="text-[9px] font-bold text-orange-600 uppercase">REQ</span>
                         )}
                       </button>
                     );

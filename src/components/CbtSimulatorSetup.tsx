@@ -35,7 +35,6 @@ export const CbtSimulatorSetup: React.FC = () => {
   const [subjectCount, setSubjectCount] = useState<number>(4);
 
   const subjectsForFullExam = Array.from(new Set([
-    'english',
     ...selectedSubjects,
     ...JAMB_SUBJECTS.map(subject => subject.id),
   ])).slice(0, subjectCount);
@@ -70,8 +69,8 @@ export const CbtSimulatorSetup: React.FC = () => {
   }, [singleSubject]);
 
   const handleToggleSubject = (subjectId: string) => {
-    if (subjectId === 'english' || subjectCount === 1) {
-      // English is compulsory in JAMB!
+    if (subjectCount === 1 && selectedSubjects.includes(subjectId)) {
+      // Keep at least one subject selected.
       return;
     }
 
@@ -81,9 +80,8 @@ export const CbtSimulatorSetup: React.FC = () => {
       }
 
       if (currentSubjects.length >= subjectCount) {
-        // Keep English and replace the last selected optional subject.
-        const withoutEnglish = currentSubjects.filter(subject => subject !== 'english');
-        return ['english', ...withoutEnglish.slice(0, Math.max(0, subjectCount - 2)), subjectId];
+        // Replace the last selected subject when the requested count is full.
+        return [...currentSubjects.slice(0, Math.max(0, subjectCount - 1)), subjectId];
       }
 
       return [...currentSubjects, subjectId];
@@ -93,7 +91,6 @@ export const CbtSimulatorSetup: React.FC = () => {
   const handleSubjectCountChange = (nextCount: number) => {
     setSubjectCount(nextCount);
     setSelectedSubjects(currentSubjects => Array.from(new Set([
-      'english',
       ...currentSubjects,
       ...JAMB_SUBJECTS.map(subject => subject.id),
     ])).slice(0, nextCount));
@@ -312,7 +309,7 @@ export const CbtSimulatorSetup: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div>
                 <h3 className="font-bold text-base text-slate-900">
-                  Select Your JAMB Subjects (English is Compulsory)
+                  Select Your JAMB Subjects
                 </h3>
                 <p className="text-xs text-slate-500">
                   Choose the number of subjects you want, then use the cards below to select them.
@@ -357,8 +354,6 @@ export const CbtSimulatorSetup: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {JAMB_SUBJECTS.map(subj => {
                 const isSelected = selectedSubjects.includes(subj.id);
-                const isEnglish = subj.id === 'english';
-
                 return (
                   <button
                     key={subj.id}
@@ -380,9 +375,6 @@ export const CbtSimulatorSetup: React.FC = () => {
                     </div>
                     <div>
                       <div className="font-bold text-xs">{subj.name}</div>
-                      {isEnglish && (
-                        <div className="text-[10px] opacity-80 font-medium">Compulsory</div>
-                      )}
                     </div>
                   </button>
                 );
